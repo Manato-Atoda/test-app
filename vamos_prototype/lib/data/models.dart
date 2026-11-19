@@ -109,7 +109,11 @@ class Interview {
   final String excerpt;
   final String author;
   final String company;
+
+  /// 本文。API の一覧では空（詳細を取得したときに入る）
   final List<ContentBlock> blocks;
+
+  bool get hasBody => blocks.isNotEmpty;
 }
 
 /// トピックのカテゴリー（RE_VAMOS の VAMOS_TOPIC_CAT）
@@ -160,4 +164,51 @@ class Topic {
   final String lead;
   final String excerpt;
   final List<ContentBlock> blocks;
+}
+
+/// 会員情報（RE_VAMOS の members に相当する項目の一部）
+class UserAccount {
+  const UserAccount({
+    required this.email,
+    required this.displayName,
+    required this.statuses,
+    required this.interests,
+    required this.areas,
+    required this.profileCompleted,
+  });
+
+  factory UserAccount.fromJson(Map<String, dynamic> json) => UserAccount(
+        email: json['email'] as String,
+        displayName: (json['displayName'] as String?) ?? '',
+        statuses: ((json['statuses'] as List?) ?? const []).cast<String>(),
+        interests: ((json['interests'] as List?) ?? const []).cast<String>(),
+        areas: ((json['areas'] as List?) ?? const []).cast<String>(),
+        profileCompleted: json['profileCompleted'] == true,
+      );
+
+  final String email;
+  final String displayName;
+  final List<String> statuses;
+  final List<String> interests;
+  final List<String> areas;
+  final bool profileCompleted;
+
+  Map<String, Object?> toJson() => {
+        'email': email,
+        'displayName': displayName,
+        'statuses': statuses,
+        'interests': interests,
+        'areas': areas,
+        'profileCompleted': profileCompleted,
+      };
+}
+
+/// ログイン状態（トークンと会員情報）
+class Session {
+  const Session({required this.token, required this.user});
+
+  final String token;
+  final UserAccount user;
+
+  Session copyWith({UserAccount? user}) => Session(token: token, user: user ?? this.user);
 }

@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 
-import '../data/vamos_store.dart';
+import '../data/repository.dart';
 import '../theme/vamos_theme.dart';
 import '../widgets/cards.dart';
 import '../widgets/common.dart';
 import 'interview_screens.dart';
+import 'search_screen.dart';
 import 'topic_screens.dart';
 
 /// ホーム（サイトのトップページに相当）
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key, required this.content, required this.onOpenTab});
 
-  final VamosContent content;
+  final Feed content;
 
   /// 下のタブを切り替える（1: インタビュー、2: トピック）
   final ValueChanged<int> onOpenTab;
@@ -19,9 +20,15 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final interviews = content.interviews;
-    return CustomScrollView(
+    final repository = VamosRepository.instance;
+    return RefreshIndicator(
+      onRefresh: repository.refresh,
+      edgeOffset: 60,
+      child: CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
-        const VamosSliverAppBar(),
+        const VamosSliverAppBar(actions: [SearchButton()]),
+        if (content.isOffline) SliverToBoxAdapter(child: OfflineBanner(onRetry: repository.refresh)),
         SliverToBoxAdapter(child: _HeroCarousel(content: content)),
         SliverToBoxAdapter(
           child: _Section(
@@ -55,6 +62,7 @@ class HomeScreen extends StatelessWidget {
         const SliverToBoxAdapter(child: _CtaBand()),
         const SliverToBoxAdapter(child: _Footer()),
       ],
+      ),
     );
   }
 }
@@ -88,7 +96,7 @@ class _Section extends StatelessWidget {
 class _HeroCarousel extends StatefulWidget {
   const _HeroCarousel({required this.content});
 
-  final VamosContent content;
+  final Feed content;
 
   @override
   State<_HeroCarousel> createState() => _HeroCarouselState();

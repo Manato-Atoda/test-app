@@ -290,7 +290,7 @@ class AuthorLine extends StatelessWidget {
   }
 }
 
-/// アセット画像（見つからない場合は淡い背景で代替）。
+/// 記事の画像。API の URL（http…）とアプリ同梱の画像（assets/…）のどちらにも対応する。
 class AssetPhoto extends StatelessWidget {
   const AssetPhoto(this.path, {super.key, this.fit = BoxFit.cover});
 
@@ -306,6 +306,80 @@ class AssetPhoto extends StatelessWidget {
     );
     final p = path;
     if (p == null || p.isEmpty) return placeholder;
+    if (p.startsWith('http')) {
+      return Image.network(
+        p,
+        fit: fit,
+        errorBuilder: (_, _, _) => placeholder,
+        frameBuilder: (context, child, frame, loadedSync) => AnimatedOpacity(
+          opacity: loadedSync || frame != null ? 1 : 0,
+          duration: const Duration(milliseconds: 250),
+          child: frame == null && !loadedSync ? ColoredBox(color: VamosColors.surfaceMuted, child: child) : child,
+        ),
+      );
+    }
     return Image.asset(p, fit: fit, errorBuilder: (_, _, _) => placeholder);
+  }
+}
+
+/// API に接続できず、同梱データを表示していることを知らせる帯。
+class OfflineBanner extends StatelessWidget {
+  const OfflineBanner({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+      padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7ED),
+        borderRadius: BorderRadius.circular(VamosRadius.large),
+        border: Border.all(color: const Color(0xFFFED7AA)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.cloud_off_rounded, size: 18, color: Color(0xFFC2410C)),
+          const SizedBox(width: 10),
+          const Expanded(
+            child: Text(
+              'オフライン表示中：アプリ内のデータを表示しています',
+              style: TextStyle(fontSize: 12.5, color: Color(0xFF9A3412), fontWeight: FontWeight.w600),
+            ),
+          ),
+          TextButton(onPressed: onRetry, child: const Text('再接続')),
+        ],
+      ),
+    );
+  }
+}
+
+/// 読み込みに失敗したときの表示。
+class ErrorView extends StatelessWidget {
+  const ErrorView({super.key, required this.message, this.onRetry});
+
+  final String message;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline_rounded, size: 40, color: VamosColors.textLight),
+            const SizedBox(height: 12),
+            Text(message, textAlign: TextAlign.center, style: const TextStyle(color: VamosColors.textMuted)),
+            if (onRetry != null) ...[
+              const SizedBox(height: 16),
+              OutlinePillButton(label: 'もう一度読み込む', onPressed: onRetry),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 }

@@ -1,39 +1,24 @@
 import 'package:flutter/material.dart';
 
+import '../config.dart';
+import '../data/api_client.dart';
 import '../data/models.dart';
-import '../data/vamos_store.dart';
+import '../data/repository.dart';
+import '../services/push_service.dart';
 import '../theme/vamos_theme.dart';
 import '../widgets/common.dart';
+import 'auth_screens.dart';
 import 'interview_screens.dart';
 
-/// マイページ（試作のため、ログインや保存内容の永続化はしない）
-class MyPageScreen extends StatefulWidget {
-  const MyPageScreen({super.key, required this.interviews});
+/// マイページ（ゲスト／ログイン中で表示を切り替える）
+class MyPageScreen extends StatelessWidget {
+  const MyPageScreen({super.key, required this.feed});
 
-  final List<Interview> interviews;
-
-  @override
-  State<MyPageScreen> createState() => _MyPageScreenState();
-}
-
-class _MyPageScreenState extends State<MyPageScreen> {
-  static const _statuses = [
-    ('🎓', '学生・就活中', '新卒での就職を考えている'),
-    ('💼', 'インターン希望', 'まずは経験を積みたい'),
-    ('🚀', '社会人・転職検討', '次のキャリアを探している'),
-    ('👀', '情報収集中', 'まだ決めていない'),
-  ];
-
-  final Set<int> _selected = {};
-
-  void _notReady() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('会員機能は試作版では準備中です')),
-    );
-  }
+  final Feed feed;
 
   @override
   Widget build(BuildContext context) {
+    final repository = VamosRepository.instance;
     return CustomScrollView(
       slivers: [
         const VamosSliverAppBar(),
@@ -41,63 +26,23 @@ class _MyPageScreenState extends State<MyPageScreen> {
           padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
           sliver: SliverList.list(
             children: [
-              _GuestCard(onSignUp: _notReady, onLogin: _notReady),
-              const SizedBox(height: 28),
-              _OnboardingCard(
-                statuses: _statuses,
-                selected: _selected,
-                onToggle: (index) => setState(() {
-                  if (!_selected.remove(index)) _selected.add(index);
-                }),
+              ValueListenableBuilder<Session?>(
+                valueListenable: repository.session,
+                builder: (context, session, _) =>
+                    session == null ? const _GuestCard() : _ProfileCard(user: session.user),
               ),
+              const SizedBox(height: 20),
+              const _NotificationCard(),
               const SizedBox(height: 28),
               const SectionKicker('Saved'),
               const SizedBox(height: 8),
               const Text('保存したインタビュー', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
               const SizedBox(height: 14),
               ValueListenableBuilder<Set<String>>(
-                valueListenable: savedInterviews,
-                builder: (context, saved, _) {
-                  final items = widget.interviews.where((i) => saved.contains(i.slug)).toList();
-                  if (items.isEmpty) {
-                    return const VamosCard(
-                      padding: EdgeInsets.all(20),
-                      child: Text(
-                        'まだありません。インタビューの右上にある保存ボタンで、ここに追加できます。',
-                        style: TextStyle(fontSize: 13.5, height: 1.8, color: VamosColors.textMuted),
-                      ),
-                    );
-                  }
-                  return Column(
-                    children: [
-                      for (final interview in items)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: VamosCard(
-                            onTap: () => openInterview(context, interview),
-                            padding: const EdgeInsets.all(12),
-                            child: Row(
-                              children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(VamosRadius.medium),
-                                  child: SizedBox(width: 96, height: 54, child: AssetPhoto(interview.thumbnail)),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    interview.title,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, height: 1.5),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                    ],
-                  );
-                },
+                valueListenable: repository.saved,
+                builder: (context, saved, _) => _SavedList(
+                  interviews: feed.interviews.where((i) => saved.contains(i.slug)).toList(),
+                ),
               ),
             ],
           ),
@@ -108,10 +53,11 @@ class _MyPageScreenState extends State<MyPageScreen> {
 }
 
 class _GuestCard extends StatelessWidget {
-  const _GuestCard({required this.onSignUp, required this.onLogin});
+  const _GuestCard();
 
-  final VoidCallback onSignUp;
-  final VoidCallback onLogin;
+  void _openAuth(BuildContext context) => Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => const AuthEmailScreen()),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -133,126 +79,212 @@ class _GuestCard extends StatelessWidget {
             style: TextStyle(fontSize: 13.5, height: 1.8, color: VamosColors.textMuted),
           ),
           const SizedBox(height: 16),
-          GradientButton(label: '新規登録（準備中）', onPressed: onSignUp, expand: true),
+          GradientButton(label: '無料で新規登録', onPressed: () => _openAuth(context), expand: true),
           const SizedBox(height: 10),
-          OutlinePillButton(label: 'ログイン', onPressed: onLogin, expand: true),
+          OutlinePillButton(label: 'ログイン', onPressed: () => _openAuth(context), expand: true),
         ],
       ),
     );
   }
 }
 
-/// サイトのオンボーディング（絵文字の選択カード＋ステップ表示）を再現したもの
-class _OnboardingCard extends StatelessWidget {
-  const _OnboardingCard({required this.statuses, required this.selected, required this.onToggle});
+class _ProfileCard extends StatelessWidget {
+  const _ProfileCard({required this.user});
 
-  final List<(String, String, String)> statuses;
-  final Set<int> selected;
-  final ValueChanged<int> onToggle;
+  final UserAccount user;
 
   @override
   Widget build(BuildContext context) {
+    final name = user.displayName.isEmpty ? '（未設定）' : user.displayName;
+    final tags = [...user.statuses, ...user.interests, ...user.areas];
     return VamosCard(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Text('ステップ 1 / 3', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: VamosColors.primary)),
-              SizedBox(width: 10),
+              InitialAvatar(user.displayName.isEmpty ? user.email : user.displayName, size: 44),
+              const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  'あなたに合う企業・記事をおすすめするために使います',
-                  style: TextStyle(fontSize: 11.5, color: VamosColors.textLight),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('$nameさん', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                    Text(user.email, style: const TextStyle(fontSize: 12, color: VamosColors.textLight)),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(3),
-            child: Stack(
-              children: [
-                Container(height: 6, color: VamosColors.borderLight),
-                FractionallySizedBox(
-                  widthFactor: 1 / 3,
-                  child: Container(height: 6, decoration: const BoxDecoration(gradient: VamosColors.gradient)),
-                ),
-              ],
+          if (tags.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Wrap(spacing: 6, runSpacing: 6, children: [for (final tag in tags) CategoryChip(tag)]),
+          ],
+          if (!user.profileCompleted) ...[
+            const SizedBox(height: 14),
+            const Text(
+              'プロフィールを設定すると、あなたに合う企業・記事をおすすめできます。',
+              style: TextStyle(fontSize: 12.5, color: VamosColors.textMuted),
             ),
-          ),
-          const SizedBox(height: 18),
-          const Text('いまの状況を教えてください', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 6),
-          const Text(
-            'あてはまるものを選んでください（複数選択できます）。',
-            style: TextStyle(fontSize: 13, color: VamosColors.textMuted),
-          ),
+          ],
           const SizedBox(height: 16),
-          for (final (index, (emoji, title, description)) in statuses.indexed)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _ChoiceCard(
-                emoji: emoji,
-                title: title,
-                description: description,
-                selected: selected.contains(index),
-                onTap: () => onToggle(index),
-              ),
+          OutlinePillButton(
+            label: user.profileCompleted ? 'プロフィールを編集' : 'プロフィールを設定',
+            expand: true,
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => OnboardingScreen(editing: user.profileCompleted),
+            )),
+          ),
+          const SizedBox(height: 4),
+          Center(
+            child: TextButton(
+              onPressed: () async {
+                await VamosRepository.instance.logout();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('ログアウトしました')));
+                }
+              },
+              child: const Text('ログアウト', style: TextStyle(color: VamosColors.textMuted)),
             ),
+          ),
         ],
       ),
     );
   }
 }
 
-class _ChoiceCard extends StatelessWidget {
-  const _ChoiceCard({
-    required this.emoji,
-    required this.title,
-    required this.description,
-    required this.selected,
-    required this.onTap,
-  });
+/// 通知の設定（試作では iOS の通知の仕組みをそのまま使う）
+class _NotificationCard extends StatefulWidget {
+  const _NotificationCard();
 
-  final String emoji;
-  final String title;
-  final String description;
-  final bool selected;
-  final VoidCallback onTap;
+  @override
+  State<_NotificationCard> createState() => _NotificationCardState();
+}
+
+class _NotificationCardState extends State<_NotificationCard> {
+  bool _busy = false;
+
+  Future<void> _enable() async {
+    final repository = VamosRepository.instance;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _busy = true);
+    try {
+      final registration = await PushService.enable();
+      if (!registration.granted) {
+        messenger.showSnackBar(const SnackBar(content: Text('通知が許可されませんでした。「設定」アプリから変更できます。')));
+        return;
+      }
+      await repository.registerDevice(platform: registration.platform, token: registration.token);
+      repository.notificationsEnabled.value = true;
+      messenger.showSnackBar(const SnackBar(content: Text('通知をオンにしました')));
+    } on ApiException catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text('通知先を登録できませんでした：${error.message}')));
+    } on UnsupportedError catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text(error.message ?? 'この端末では通知に対応していません')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: selected ? VamosColors.primaryLight : VamosColors.surface,
-          borderRadius: BorderRadius.circular(VamosRadius.large),
-          border: Border.all(color: selected ? VamosColors.primary : VamosColors.border, width: selected ? 2 : 1),
-        ),
-        child: Row(
+    return ValueListenableBuilder<bool>(
+      valueListenable: VamosRepository.instance.notificationsEnabled,
+      builder: (context, enabled, _) => VamosCard(
+        padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(emoji, style: const TextStyle(fontSize: 24)),
-                  const SizedBox(height: 8),
-                  Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 2),
-                  Text(description, style: const TextStyle(fontSize: 12, color: VamosColors.textMuted)),
-                ],
-              ),
+            Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: VamosColors.primaryLight,
+                    borderRadius: BorderRadius.circular(VamosRadius.medium),
+                  ),
+                  child: const Icon(Icons.notifications_active_outlined, color: VamosColors.primary),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('新着のお知らせ', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                      Text(
+                        '新しいインタビューの公開をお知らせします',
+                        style: TextStyle(fontSize: 12, color: VamosColors.textMuted),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: enabled,
+                  onChanged: _busy || enabled ? null : (_) => _enable(),
+                ),
+              ],
             ),
-            if (selected) const Icon(Icons.check_circle_rounded, color: VamosColors.primary),
+            if (enabled)
+              Padding(
+                padding: const EdgeInsets.only(top: 10, right: 8),
+                child: Text(
+                  '試作：パソコンのブラウザで ${AppConfig.adminUrl} を開くと、通知の配信を試せます。',
+                  style: const TextStyle(fontSize: 11.5, height: 1.6, color: VamosColors.textLight),
+                ),
+              ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _SavedList extends StatelessWidget {
+  const _SavedList({required this.interviews});
+
+  final List<Interview> interviews;
+
+  @override
+  Widget build(BuildContext context) {
+    if (interviews.isEmpty) {
+      return const VamosCard(
+        padding: EdgeInsets.all(20),
+        child: Text(
+          'まだありません。インタビューの右上にある保存ボタンで、ここに追加できます。',
+          style: TextStyle(fontSize: 13.5, height: 1.8, color: VamosColors.textMuted),
+        ),
+      );
+    }
+    return Column(
+      children: [
+        for (final interview in interviews)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: VamosCard(
+              onTap: () => openInterview(context, interview),
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(VamosRadius.medium),
+                    child: SizedBox(width: 96, height: 54, child: AssetPhoto(interview.thumbnail)),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      interview.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, height: 1.5),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

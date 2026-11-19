@@ -1,58 +1,80 @@
 import 'package:flutter/material.dart';
 
 import '../data/models.dart';
-import '../data/vamos_store.dart';
+import '../data/repository.dart';
 import '../theme/vamos_theme.dart';
 import '../widgets/cards.dart';
 import '../widgets/common.dart';
 import '../widgets/content_blocks.dart';
+import 'search_screen.dart';
 
 void openInterview(BuildContext context, Interview interview) {
   Navigator.of(context).push(MaterialPageRoute<void>(
-    builder: (_) => InterviewDetailScreen(interview: interview),
+    settings: RouteSettings(name: '/interviews/${interview.slug}'),
+    builder: (_) => InterviewDetailScreen(slug: interview.slug, preview: interview),
   ));
 }
 
-/// 企業インタビュー一覧
+/// 企業インタビュー一覧（引っ張って更新）
 class InterviewListScreen extends StatelessWidget {
-  const InterviewListScreen({super.key, required this.interviews});
+  const InterviewListScreen({super.key, required this.feed});
 
-  final List<Interview> interviews;
+  final Feed feed;
 
   @override
   Widget build(BuildContext context) {
-    return CustomScrollView(
-      slivers: [
-        const VamosSliverAppBar(),
-        SliverToBoxAdapter(
-          child: PageIntro(
-            kicker: 'Interview',
-            title: '企業インタビュー',
-            description: 'Vamos の学生リポーターが、参加企業を直接取材。求人票だけでは見えない“はたらくリアル”を、対談形式でお届けします。',
-            count: interviews.length,
-          ),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-          sliver: SliverList.separated(
-            itemCount: interviews.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 18),
-            itemBuilder: (context, index) => InterviewCard(
-              interview: interviews[index],
-              onTap: () => openInterview(context, interviews[index]),
+    final interviews = feed.interviews;
+    final repository = VamosRepository.instance;
+    return RefreshIndicator(
+      onRefresh: repository.refresh,
+      edgeOffset: 60,
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          const VamosSliverAppBar(actions: [SearchButton()]),
+          if (feed.isOffline) SliverToBoxAdapter(child: OfflineBanner(onRetry: repository.refresh)),
+          SliverToBoxAdapter(
+            child: PageIntro(
+              kicker: 'Interview',
+              title: '企業インタビュー',
+              description: 'Vamos の学生リポーターが、参加企業を直接取材。求人票だけでは見えない“はたらくリアル”を、対談形式でお届けします。',
+              count: interviews.length,
             ),
           ),
-        ),
-      ],
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+            sliver: SliverList.separated(
+              itemCount: interviews.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 18),
+              itemBuilder: (context, index) => InterviewCard(
+                interview: interviews[index],
+                onTap: () => openInterview(context, interviews[index]),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-/// 企業インタビューの詳細（吹き出しの対談形式）
-class InterviewDetailScreen extends StatelessWidget {
-  const InterviewDetailScreen({super.key, required this.interview});
+/// 企業インタビューの詳細（吹き出しの対談形式）。本文は API から取得する。
+class InterviewDetailScreen extends StatefulWidget {
+  const InterviewDetailScreen({super.key, required this.slug, this.preview});
 
-  final Interview interview;
+  final String slug;
+
+  /// 一覧から開いたときの概要（本文の読み込み中に先に表示する）
+  final Interview? preview;
+
+  @override
+  State<InterviewDetailScreen> createState() => _InterviewDetailScreenState();
+}
+
+class _InterviewDetailScreenState extends State<InterviewDetailScreen> {
+  late Future<Interview> _future = _load();
+
+  Future<Interview> _load() => VamosRepository.instance.interview(widget.slug);
 
   @override
   Widget build(BuildContext context) {
@@ -60,51 +82,82 @@ class InterviewDetailScreen extends StatelessWidget {
       backgroundColor: VamosColors.surface,
       appBar: AppBar(
         title: Image.asset('assets/vamos/images/logo.png', height: 26, semanticLabel: 'VAMOS'),
-        actions: [
-          ValueListenableBuilder<Set<String>>(
-            valueListenable: savedInterviews,
-            builder: (context, saved, _) {
-              final isSaved = saved.contains(interview.slug);
-              return IconButton(
-                tooltip: isSaved ? '保存を解除' : '保存する',
-                icon: Icon(
-                  isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-                  color: isSaved ? VamosColors.primary : VamosColors.text,
-                ),
-                onPressed: () {
-                  toggleSaved(interview.slug);
-                  ScaffoldMessenger.of(context)
-                    ..hideCurrentSnackBar()
-                    ..showSnackBar(SnackBar(
-                      content: Text(isSaved ? '保存を解除しました' : 'マイページに保存しました'),
-                      duration: const Duration(seconds: 2),
-                    ));
-                },
-              );
-            },
-          ),
-          const SizedBox(width: 4),
-        ],
+        actions: [_SaveButton(slug: widget.slug), const SizedBox(width: 4)],
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 48),
-        children: [
-          const Align(alignment: Alignment.centerLeft, child: CategoryChip('インタビュー', style: ChipStyle.filled)),
-          const SizedBox(height: 14),
-          Text(interview.title, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w800, height: 1.5)),
-          const SizedBox(height: 14),
-          _MetaRow(interview: interview),
-          const SizedBox(height: 18),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(VamosRadius.large),
-            child: AspectRatio(aspectRatio: 16 / 9, child: AssetPhoto(interview.thumbnail)),
-          ),
-          const SizedBox(height: 26),
-          for (final block in interview.blocks) ContentBlockView(block),
-          const SizedBox(height: 24),
-          const _EndCta(),
-        ],
+      body: FutureBuilder<Interview>(
+        future: _future,
+        builder: (context, snapshot) {
+          final interview = snapshot.data ?? widget.preview;
+          if (snapshot.hasError && interview == null) {
+            return ErrorView(
+              message: snapshot.error.toString(),
+              onRetry: () => setState(() => _future = _load()),
+            );
+          }
+          if (interview == null) return const Center(child: CircularProgressIndicator());
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 48),
+            children: [
+              const Align(alignment: Alignment.centerLeft, child: CategoryChip('インタビュー', style: ChipStyle.filled)),
+              const SizedBox(height: 14),
+              Text(interview.title, style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w800, height: 1.5)),
+              const SizedBox(height: 14),
+              _MetaRow(interview: interview),
+              const SizedBox(height: 18),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(VamosRadius.large),
+                child: AspectRatio(aspectRatio: 16 / 9, child: AssetPhoto(interview.thumbnail)),
+              ),
+              const SizedBox(height: 26),
+              if (snapshot.data == null && snapshot.hasError)
+                ErrorView(message: snapshot.error.toString(), onRetry: () => setState(() => _future = _load()))
+              else if (snapshot.data == null)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 40),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else ...[
+                for (final block in interview.blocks) ContentBlockView(block),
+                const SizedBox(height: 24),
+                const _EndCta(),
+              ],
+            ],
+          );
+        },
       ),
+    );
+  }
+}
+
+class _SaveButton extends StatelessWidget {
+  const _SaveButton({required this.slug});
+
+  final String slug;
+
+  @override
+  Widget build(BuildContext context) {
+    final repository = VamosRepository.instance;
+    return ValueListenableBuilder<Set<String>>(
+      valueListenable: repository.saved,
+      builder: (context, saved, _) {
+        final isSaved = saved.contains(slug);
+        return IconButton(
+          tooltip: isSaved ? '保存を解除' : '保存する',
+          icon: Icon(
+            isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+            color: isSaved ? VamosColors.primary : VamosColors.text,
+          ),
+          onPressed: () {
+            repository.toggleSaved(slug);
+            ScaffoldMessenger.of(context)
+              ..hideCurrentSnackBar()
+              ..showSnackBar(SnackBar(
+                content: Text(isSaved ? '保存を解除しました' : 'マイページに保存しました'),
+                duration: const Duration(seconds: 2),
+              ));
+          },
+        );
+      },
     );
   }
 }
