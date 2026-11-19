@@ -40,7 +40,7 @@ class _TopicListScreenState extends State<TopicListScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           const VamosSliverAppBar(actions: [SearchButton()]),
-          if (widget.feed.isOffline) SliverToBoxAdapter(child: OfflineBanner(onRetry: repository.refresh)),
+          if (widget.feed.isOffline) SliverToBoxAdapter(child: OfflineBanner.forFeed(widget.feed, onRetry: repository.refresh)),
           SliverToBoxAdapter(
             child: PageIntro(
               kicker: 'Topics',

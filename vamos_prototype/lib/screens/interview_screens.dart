@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/models.dart';
 import '../data/repository.dart';
+import '../services/external_actions.dart';
 import '../theme/vamos_theme.dart';
 import '../widgets/cards.dart';
 import '../widgets/common.dart';
@@ -32,7 +33,7 @@ class InterviewListScreen extends StatelessWidget {
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           const VamosSliverAppBar(actions: [SearchButton()]),
-          if (feed.isOffline) SliverToBoxAdapter(child: OfflineBanner(onRetry: repository.refresh)),
+          if (feed.isOffline) SliverToBoxAdapter(child: OfflineBanner.forFeed(feed, onRetry: repository.refresh)),
           SliverToBoxAdapter(
             child: PageIntro(
               kicker: 'Interview',
@@ -82,7 +83,23 @@ class _InterviewDetailScreenState extends State<InterviewDetailScreen> {
       backgroundColor: VamosColors.surface,
       appBar: AppBar(
         title: Image.asset('assets/vamos/images/logo.png', height: 26, semanticLabel: 'VAMOS'),
-        actions: [_SaveButton(slug: widget.slug), const SizedBox(width: 4)],
+        actions: [
+          FutureBuilder<Interview>(
+            future: _future,
+            builder: (context, snapshot) {
+              final interview = snapshot.data ?? widget.preview;
+              return Builder(
+                builder: (buttonContext) => IconButton(
+                  tooltip: '共有する',
+                  icon: const Icon(Icons.ios_share_rounded),
+                  onPressed: interview == null ? null : () => shareInterview(buttonContext, interview),
+                ),
+              );
+            },
+          ),
+          _SaveButton(slug: widget.slug),
+          const SizedBox(width: 4),
+        ],
       ),
       body: FutureBuilder<Interview>(
         future: _future,

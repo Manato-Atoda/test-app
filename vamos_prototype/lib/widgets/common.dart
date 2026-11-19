@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../data/repository.dart';
 import '../theme/vamos_theme.dart';
 
 /// 画面上部のヘッダー（白地＋ロゴ＋水色グラデーションの細線）。
@@ -307,10 +308,13 @@ class AssetPhoto extends StatelessWidget {
     final p = path;
     if (p == null || p.isEmpty) return placeholder;
     if (p.startsWith('http')) {
+      // オフラインで読み込めない場合は、同じ画像がアプリに同梱されていればそれを使う
+      final bundled = p.contains('/media/') ? 'assets/vamos/images/${p.split('/media/').last}' : null;
       return Image.network(
         p,
         fit: fit,
-        errorBuilder: (_, _, _) => placeholder,
+        errorBuilder: (_, _, _) =>
+            bundled == null ? placeholder : Image.asset(bundled, fit: fit, errorBuilder: (_, _, _) => placeholder),
         frameBuilder: (context, child, frame, loadedSync) => AnimatedOpacity(
           opacity: loadedSync || frame != null ? 1 : 0,
           duration: const Duration(milliseconds: 250),
@@ -322,10 +326,21 @@ class AssetPhoto extends StatelessWidget {
   }
 }
 
-/// API に接続できず、同梱データを表示していることを知らせる帯。
+/// API に接続できず、前回のデータや同梱データを表示していることを知らせる帯。
 class OfflineBanner extends StatelessWidget {
-  const OfflineBanner({super.key, required this.onRetry});
+  const OfflineBanner({super.key, required this.message, required this.onRetry});
 
+  /// 表示中のデータに合わせた案内文を作る
+  factory OfflineBanner.forFeed(Feed feed, {required VoidCallback onRetry}) {
+    final at = feed.updatedAt;
+    String two(int n) => n.toString().padLeft(2, '0');
+    final message = feed.source == DataSource.cached
+        ? 'オフライン表示中：${at.month}/${at.day} ${two(at.hour)}:${two(at.minute)} に取得した内容です'
+        : 'オフライン表示中：アプリ内のデータを表示しています';
+    return OfflineBanner(message: message, onRetry: onRetry);
+  }
+
+  final String message;
   final VoidCallback onRetry;
 
   @override
@@ -342,10 +357,10 @@ class OfflineBanner extends StatelessWidget {
         children: [
           const Icon(Icons.cloud_off_rounded, size: 18, color: Color(0xFFC2410C)),
           const SizedBox(width: 10),
-          const Expanded(
+          Expanded(
             child: Text(
-              'オフライン表示中：アプリ内のデータを表示しています',
-              style: TextStyle(fontSize: 12.5, color: Color(0xFF9A3412), fontWeight: FontWeight.w600),
+              message,
+              style: const TextStyle(fontSize: 12.5, color: Color(0xFF9A3412), fontWeight: FontWeight.w600),
             ),
           ),
           TextButton(onPressed: onRetry, child: const Text('再接続')),

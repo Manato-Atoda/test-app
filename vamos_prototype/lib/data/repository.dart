@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'api_client.dart';
+import 'local_store.dart';
 import 'models.dart';
 
 /// 表示中のデータの出どころ
@@ -11,7 +13,10 @@ enum DataSource {
   /// API から取得した最新データ
   live,
 
-  /// API に接続できず、アプリに同梱したデータを表示している
+  /// API に接続できず、前回取得したデータを表示している
+  cached,
+
+  /// API に接続できず、前回のデータもないため、アプリに同梱したデータを表示している
   bundled,
 }
 
@@ -22,9 +27,11 @@ class Feed {
   final List<Interview> interviews;
   final List<Topic> topics;
   final DataSource source;
+
+  /// データを取得した時刻（cached のときは前回取得した時刻）
   final DateTime updatedAt;
 
-  bool get isOffline => source == DataSource.bundled;
+  bool get isOffline => source != DataSource.live;
 }
 
 /// 検索結果（インタビューまたはトピック）
@@ -42,13 +49,17 @@ final class TopicHit extends SearchHit {
   final Topic topic;
 }
 
-/// アプリ全体のデータ窓口。API を優先し、つながらない場合は同梱データで表示する。
+/// アプリ全体のデータ窓口。
+///
+/// 一覧は「API → 前回取得したデータ → 同梱データ」の順に使う。
+/// ログイン状態・保存した記事・通知の設定は端末に保存し、次回起動時に戻す。
 class VamosRepository {
   VamosRepository._();
 
   static final instance = VamosRepository._();
 
   final ApiClient api = ApiClient();
+  final LocalStore _store = LocalStore.instance;
 
   /// トップ・一覧のデータ（null は読み込み前）
   final ValueNotifier<Feed?> feed = ValueNotifier<Feed?>(null);
@@ -64,9 +75,32 @@ class VamosRepository {
 
   Future<_Bundled>? _bundled;
 
+  // ---------------------------------------------------------------- 起動時
+
+  /// 端末に保存した状態を戻す。ログイン中なら会員情報を最新にする。
+  Future<void> restore() async {
+    saved.value = await _store.readSaved();
+    notificationsEnabled.value = await _store.readNotificationsEnabled();
+    final stored = await _store.readSession();
+    if (stored == null) return;
+    api.token = stored.token;
+    session.value = stored;
+    unawaited(_refreshAccount());
+  }
+
+  Future<void> _refreshAccount() async {
+    try {
+      final json = await api.get('/api/v1/me') as Map<String, dynamic>;
+      await _setSession(session.value?.copyWith(user: UserAccount.fromJson(json)));
+    } on ApiException catch (error) {
+      // トークンが無効（サーバー再起動など）ならログアウト。接続できないだけならそのまま
+      if (error.isUnauthorized) await _setSession(null);
+    }
+  }
+
   // ---------------------------------------------------------------- 記事
 
-  /// 最新のデータを取得する。失敗したら同梱データに切り替える。
+  /// 最新のデータを取得する。失敗したら前回のデータ、なければ同梱データに切り替える。
   Future<Feed> refresh() async {
     Feed next;
     try {
@@ -78,30 +112,56 @@ class VamosRepository {
         source: DataSource.live,
         updatedAt: DateTime.now(),
       );
+      unawaited(_store.writeFeed(
+        interviewsJson: jsonEncode(interviews['items']),
+        topicsJson: jsonEncode(topics['items']),
+      ));
     } on ApiException catch (error) {
-      debugPrint('API に接続できないため同梱データを表示します: $error');
-      final bundled = await _loadBundled();
-      next = Feed(
-        interviews: bundled.interviews,
-        topics: bundled.topics,
-        source: DataSource.bundled,
-        updatedAt: DateTime.now(),
-      );
+      debugPrint('API に接続できないため、保存済みのデータを表示します: $error');
+      next = await _offlineFeed();
     }
     feed.value = next;
     return next;
   }
 
-  /// インタビューの詳細（本文つき）
+  Future<Feed> _offlineFeed() async {
+    final cached = await _store.readFeed();
+    if (cached != null) {
+      try {
+        return Feed(
+          interviews: _list(jsonDecode(cached.interviewsJson), Interview.fromJson),
+          topics: _list(jsonDecode(cached.topicsJson), Topic.fromJson),
+          source: DataSource.cached,
+          updatedAt: cached.savedAt,
+        );
+      } on Object catch (error) {
+        debugPrint('前回のデータを読み込めませんでした: $error');
+      }
+    }
+    final bundled = await _loadBundled();
+    return Feed(
+      interviews: bundled.interviews,
+      topics: bundled.topics,
+      source: DataSource.bundled,
+      updatedAt: DateTime.now(),
+    );
+  }
+
+  /// インタビューの詳細（本文つき）。保存した記事は本文も端末に残す。
   Future<Interview> interview(String slug) async {
     try {
       final json = await api.get('/api/v1/interviews/${Uri.encodeComponent(slug)}') as Map<String, dynamic>;
+      if (isSaved(slug)) unawaited(_store.writeInterviewDetail(slug, jsonEncode(json)));
       return Interview.fromJson(json);
     } on ApiException catch (error) {
       if (!error.isOffline && error.statusCode != 404) rethrow;
+      final stored = await _store.readInterviewDetail(slug);
+      if (stored != null) return Interview.fromJson(jsonDecode(stored) as Map<String, dynamic>);
       final bundled = await _loadBundled();
       final found = bundled.interviews.where((i) => i.slug == slug).firstOrNull;
-      if (found == null) throw const ApiException('記事が見つかりません', statusCode: 404);
+      if (found == null) {
+        throw ApiException(error.isOffline ? 'オフラインのため記事を読み込めません' : '記事が見つかりません', statusCode: 404);
+      }
       return found;
     }
   }
@@ -140,8 +200,23 @@ class VamosRepository {
 
   void toggleSaved(String slug) {
     final next = Set<String>.of(saved.value);
-    if (!next.remove(slug)) next.add(slug);
+    if (next.remove(slug)) {
+      unawaited(_store.removeInterviewDetail(slug));
+    } else {
+      next.add(slug);
+      unawaited(_cacheDetail(slug));
+    }
     saved.value = next;
+    unawaited(_store.writeSaved(next));
+  }
+
+  Future<void> _cacheDetail(String slug) async {
+    try {
+      final json = await api.get('/api/v1/interviews/${Uri.encodeComponent(slug)}');
+      await _store.writeInterviewDetail(slug, jsonEncode(json));
+    } on ApiException {
+      // オフラインなら、次に記事を開いたときに保存する
+    }
   }
 
   // ---------------------------------------------------------------- 会員
@@ -158,8 +233,7 @@ class VamosRepository {
       token: json['token'] as String,
       user: UserAccount.fromJson(json['user'] as Map<String, dynamic>),
     );
-    api.token = next.token;
-    session.value = next;
+    await _setSession(next);
     return next;
   }
 
@@ -179,10 +253,10 @@ class VamosRepository {
         'areas': areas,
       }) as Map<String, dynamic>;
       final user = UserAccount.fromJson(json);
-      session.value = current.copyWith(user: user);
+      await _setSession(current.copyWith(user: user));
       return user;
     } on ApiException catch (error) {
-      if (error.isUnauthorized) _clearSession();
+      if (error.isUnauthorized) await _setSession(null);
       rethrow;
     }
   }
@@ -193,12 +267,13 @@ class VamosRepository {
     } on ApiException {
       // サーバーに届かなくても、端末側はログアウトする
     }
-    _clearSession();
+    await _setSession(null);
   }
 
-  void _clearSession() {
-    api.token = null;
-    session.value = null;
+  Future<void> _setSession(Session? next) async {
+    api.token = next?.token;
+    session.value = next;
+    await _store.writeSession(next);
   }
 
   // ---------------------------------------------------------------- 通知
@@ -206,6 +281,8 @@ class VamosRepository {
   /// 通知先の端末を登録する（ログイン中なら会員にひもづける）
   Future<void> registerDevice({required String platform, required String token}) async {
     await api.post('/api/v1/devices', {'platform': platform, 'token': token});
+    notificationsEnabled.value = true;
+    await _store.writeNotificationsEnabled(true);
   }
 
   // ---------------------------------------------------------------- 同梱データ

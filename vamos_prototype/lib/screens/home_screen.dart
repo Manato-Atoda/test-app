@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../config.dart';
 import '../data/repository.dart';
+import '../services/external_actions.dart';
 import '../theme/vamos_theme.dart';
 import '../widgets/cards.dart';
 import '../widgets/common.dart';
@@ -28,7 +30,7 @@ class HomeScreen extends StatelessWidget {
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
         const VamosSliverAppBar(actions: [SearchButton()]),
-        if (content.isOffline) SliverToBoxAdapter(child: OfflineBanner(onRetry: repository.refresh)),
+        if (content.isOffline) SliverToBoxAdapter(child: OfflineBanner.forFeed(content, onRetry: repository.refresh)),
         SliverToBoxAdapter(child: _HeroCarousel(content: content)),
         SliverToBoxAdapter(
           child: _Section(
@@ -238,22 +240,28 @@ void showAboutVamos(BuildContext context) {
     context: context,
     showDragHandle: true,
     backgroundColor: VamosColors.surface,
-    builder: (context) => const Padding(
-      padding: EdgeInsets.fromLTRB(24, 0, 24, 40),
+    builder: (context) => Padding(
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 40),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SectionKicker('About Vamos', withRule: true),
-          SizedBox(height: 14),
-          Text(
+          const SectionKicker('About Vamos', withRule: true),
+          const SizedBox(height: 14),
+          const Text(
             '仕事を選ぶとき、\n知りたいことは、きっと同じだ。',
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, height: 1.55),
           ),
-          SizedBox(height: 14),
-          Text(
+          const SizedBox(height: 14),
+          const Text(
             '新卒でも、転職でも、まだ進路を決めていなくても。知りたいのは、求人票に書かれた条件だけではなく、どんな人が、どんな思いで働いているのか。\n\nVamos は、学生編集部と Galaxia がつくる、働くすべての人のための Web メディアです。',
             style: TextStyle(fontSize: 14, height: 1.85, color: VamosColors.textMuted),
+          ),
+          const SizedBox(height: 20),
+          OutlinePillButton(
+            label: 'Web 版の Vamos を見る  ↗',
+            expand: true,
+            onPressed: () => openExternalUrl(context, AppConfig.webUrl),
           ),
         ],
       ),

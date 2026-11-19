@@ -53,11 +53,18 @@ class _RootScreenState extends State<RootScreen> {
   @override
   void initState() {
     super.initState();
-    _repository.refresh();
-    PushService.init(onOpenLink: openLink);
-    PushService.isEnabled().then((enabled) {
-      if (enabled) _repository.notificationsEnabled.value = true;
-    });
+    _start();
+  }
+
+  Future<void> _start() async {
+    // ログイン状態・保存した記事を戻してから、最新のデータを取得する
+    await _repository.restore();
+    await _repository.refresh();
+    await PushService.init(onOpenLink: openLink);
+    // 「設定」アプリで通知をオフにされていたら、表示もオフにする
+    if (_repository.notificationsEnabled.value && !await PushService.isEnabled()) {
+      _repository.notificationsEnabled.value = false;
+    }
   }
 
   @override

@@ -19,6 +19,10 @@ abstract final class AppConfig {
   /// Web 版のトップページ
   static const webUrl = 'https://webmagazine-vamos.com/';
 
+  /// 共有するときの記事の URL。
+  /// 試作では Web 版の記事 URL が未確定のため、トップページを使う（本番の URL が決まったら差し替える）。
+  static String shareUrl(String slug) => webUrl;
+
   /// アプリ内リンクのスキーム（vamos://app/interviews/<slug>）
   static const linkScheme = 'vamos';
 }

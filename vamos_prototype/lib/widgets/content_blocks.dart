@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/models.dart';
+import '../services/external_actions.dart';
 import '../theme/vamos_theme.dart';
 import 'common.dart';
 
@@ -189,9 +190,7 @@ class _LinkCard extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 12),
       child: VamosCard(
         padding: const EdgeInsets.all(14),
-        onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('試作版では外部サイトを開けません（${link.source}）')),
-        ),
+        onTap: () => openExternalUrl(context, link.url),
         child: Row(
           children: [
             Container(
