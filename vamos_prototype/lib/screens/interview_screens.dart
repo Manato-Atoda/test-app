@@ -93,16 +93,17 @@ class _InterviewDetailScreenState extends State<InterviewDetailScreen> {
             builder: (context, snapshot) {
               final interview = snapshot.data ?? widget.preview;
               return Builder(
-                builder: (buttonContext) => IconButton(
+                builder: (buttonContext) => GlassIconButton(
+                  symbol: 'square.and.arrow.up',
+                  icon: Icons.ios_share_rounded,
                   tooltip: '共有する',
-                  icon: const Icon(Icons.ios_share_rounded),
                   onPressed: interview == null ? null : () => shareInterview(buttonContext, interview),
                 ),
               );
             },
           ),
           _SaveButton(slug: widget.slug),
-          const SizedBox(width: 4),
+          const SizedBox(width: 12),
         ],
       ),
       body: FutureBuilder<Interview>(
@@ -162,12 +163,11 @@ class _SaveButton extends StatelessWidget {
       valueListenable: repository.saved,
       builder: (context, saved, _) {
         final isSaved = saved.contains(slug);
-        return IconButton(
+        return GlassIconButton(
+          symbol: isSaved ? 'bookmark.fill' : 'bookmark',
+          icon: isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+          color: isSaved ? VamosColors.primary : VamosColors.text,
           tooltip: isSaved ? '保存を解除' : '保存する',
-          icon: Icon(
-            isSaved ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-            color: isSaved ? VamosColors.primary : VamosColors.text,
-          ),
           onPressed: () {
             repository.toggleSaved(slug);
             ScaffoldMessenger.of(context)

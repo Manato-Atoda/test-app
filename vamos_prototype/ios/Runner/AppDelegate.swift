@@ -39,6 +39,8 @@ final class VamosGlassPlugin: NSObject, FlutterPlugin {
     instance.channel = channel
     registrar.addMethodCallDelegate(instance, channel: channel)
     registrar.register(VamosGlassViewFactory(), withId: "vamos/glass")
+    registrar.register(VamosTabBarFactory(messenger: registrar.messenger()), withId: "vamos/tabbar")
+    registrar.register(VamosGlassButtonFactory(messenger: registrar.messenger()), withId: "vamos/glassbutton")
     NotificationCenter.default.addObserver(
       instance,
       selector: #selector(accessibilityChanged),
@@ -224,5 +226,141 @@ final class VamosPushPlugin: NSObject, FlutterPlugin {
       deliver(link: link)
     }
     completionHandler()
+  }
+}
+
+// MARK: - 本物のタブバー（リキッドグラスのアニメーションつき）
+
+/// iOS の UITabBar をそのまま使う。選択の「レンズ」が滑る動き・押したときの反応・
+/// 指でなぞってタブを切り替える操作は、すべて iOS 標準の動きになる。
+final class VamosTabBarFactory: NSObject, FlutterPlatformViewFactory {
+  private let messenger: FlutterBinaryMessenger
+
+  init(messenger: FlutterBinaryMessenger) {
+    self.messenger = messenger
+  }
+
+  func create(withFrame frame: CGRect, viewIdentifier viewId: Int64, arguments args: Any?) -> FlutterPlatformView {
+    VamosTabBarView(frame: frame, viewId: viewId, messenger: messenger, arguments: args as? [String: Any] ?? [:])
+  }
+
+  func createArgsCodec() -> FlutterMessageCodec & NSObjectProtocol {
+    FlutterStandardMessageCodec.sharedInstance()
+  }
+}
+
+final class VamosTabBarView: NSObject, FlutterPlatformView, UITabBarDelegate {
+  private let container: UIView
+  private let tabBar = UITabBar()
+  private let channel: FlutterMethodChannel
+
+  init(frame: CGRect, viewId: Int64, messenger: FlutterBinaryMessenger, arguments: [String: Any]) {
+    container = UIView(frame: frame)
+    container.backgroundColor = .clear
+    channel = FlutterMethodChannel(name: "vamos/tabbar/\(viewId)", binaryMessenger: messenger)
+    super.init()
+
+    let items = (arguments["items"] as? [[String: Any]] ?? []).enumerated().map { index, item in
+      let tabItem = UITabBarItem(
+        title: item["title"] as? String,
+        image: UIImage(systemName: item["symbol"] as? String ?? "circle"),
+        selectedImage: UIImage(systemName: item["selectedSymbol"] as? String ?? item["symbol"] as? String ?? "circle")
+      )
+      tabItem.tag = index
+      return tabItem
+    }
+    tabBar.items = items
+    let selected = (arguments["selected"] as? NSNumber)?.intValue ?? 0
+    if items.indices.contains(selected) {
+      tabBar.selectedItem = items[selected]
+    }
+    if let argb = (arguments["tint"] as? NSNumber)?.uint32Value {
+      tabBar.tintColor = UIColor(argb: argb)
+    }
+    tabBar.delegate = self
+    tabBar.frame = container.bounds
+    tabBar.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    container.addSubview(tabBar)
+
+    // Flutter 側からタブを切り替えた場合（ホームの「すべて見る」など）
+    channel.setMethodCallHandler { [weak self] call, result in
+      if call.method == "select", let index = call.arguments as? Int, let self, let items = self.tabBar.items,
+         items.indices.contains(index) {
+        self.tabBar.selectedItem = items[index]
+      }
+      result(nil)
+    }
+  }
+
+  func view() -> UIView { container }
+
+  func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
+    channel.invokeMethod("onSelect", arguments: item.tag)
+  }
+}
+
+// MARK: - ガラスのボタン（押すとガラスが反応する）
+
+final class VamosGlassButtonFactory: NSObject, FlutterPlatformViewFactory {
+  private let messenger: FlutterBinaryMessenger
+
+  init(messenger: FlutterBinaryMessenger) {
+    self.messenger = messenger
+  }
+
+  func create(withFrame frame: CGRect, viewIdentifier viewId: Int64, arguments args: Any?) -> FlutterPlatformView {
+    VamosGlassButtonView(frame: frame, viewId: viewId, messenger: messenger, arguments: args as? [String: Any] ?? [:])
+  }
+
+  func createArgsCodec() -> FlutterMessageCodec & NSObjectProtocol {
+    FlutterStandardMessageCodec.sharedInstance()
+  }
+}
+
+final class VamosGlassButtonView: NSObject, FlutterPlatformView {
+  private let button: UIButton
+  private let channel: FlutterMethodChannel
+
+  init(frame: CGRect, viewId: Int64, messenger: FlutterBinaryMessenger, arguments: [String: Any]) {
+    channel = FlutterMethodChannel(name: "vamos/glassbutton/\(viewId)", binaryMessenger: messenger)
+    var config: UIButton.Configuration
+    if #available(iOS 26.0, *) {
+      config = .glass()
+    } else {
+      config = .gray()
+    }
+    config.cornerStyle = .capsule
+    let image = UIImage(
+      systemName: arguments["symbol"] as? String ?? "circle",
+      withConfiguration: UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)
+    )
+    let foreground = (arguments["tint"] as? NSNumber).map { UIColor(argb: $0.uint32Value) } ?? .label
+    // ガラスのボタンはアイコンの色を自動で決めるため、色を指定したいときは画像自体に色をつける
+    config.image = arguments["tint"] == nil ? image : image?.withTintColor(foreground, renderingMode: .alwaysOriginal)
+    config.baseForegroundColor = foreground
+    button = UIButton(configuration: config)
+    // ガラスのボタンはアイコンの色に tintColor を使うため、両方に設定する
+    button.tintColor = foreground
+    button.frame = CGRect(origin: .zero, size: frame.size)
+    button.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    button.accessibilityLabel = arguments["label"] as? String
+    super.init()
+    button.addAction(UIAction { [weak self] _ in
+      self?.channel.invokeMethod("onTap", arguments: nil)
+    }, for: .primaryActionTriggered)
+  }
+
+  func view() -> UIView { button }
+}
+
+extension UIColor {
+  /// Flutter の Color（0xAARRGGBB）から作る
+  convenience init(argb: UInt32) {
+    self.init(
+      red: CGFloat((argb >> 16) & 0xFF) / 255,
+      green: CGFloat((argb >> 8) & 0xFF) / 255,
+      blue: CGFloat(argb & 0xFF) / 255,
+      alpha: CGFloat((argb >> 24) & 0xFF) / 255
+    )
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/repository.dart';
 import '../theme/vamos_theme.dart';
 import '../widgets/common.dart';
+import '../widgets/glass.dart';
 import 'interview_screens.dart';
 import 'topic_screens.dart';
 
@@ -12,13 +13,17 @@ class SearchButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: '検索',
-      icon: const Icon(Icons.search_rounded),
-      onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
-        settings: const RouteSettings(name: '/search'),
-        builder: (_) => const SearchScreen(),
-      )),
+    return Padding(
+      padding: const EdgeInsets.only(right: 12),
+      child: GlassIconButton(
+        symbol: 'magnifyingglass',
+        icon: Icons.search_rounded,
+        tooltip: '検索',
+        onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+          settings: const RouteSettings(name: '/search'),
+          builder: (_) => const SearchScreen(),
+        )),
+      ),
     );
   }
 }

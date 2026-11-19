@@ -119,10 +119,34 @@ class _VamosShellState extends State<VamosShell> {
         selectedIndex: _tab,
         onSelected: (tab) => setState(() => _tab = tab),
         items: const [
-          GlassTabItem(icon: Icons.home_outlined, selectedIcon: Icons.home_rounded, label: 'ホーム'),
-          GlassTabItem(icon: Icons.forum_outlined, selectedIcon: Icons.forum_rounded, label: 'インタビュー'),
-          GlassTabItem(icon: Icons.lightbulb_outline_rounded, selectedIcon: Icons.lightbulb_rounded, label: 'トピック'),
-          GlassTabItem(icon: Icons.person_outline_rounded, selectedIcon: Icons.person_rounded, label: 'マイページ'),
+          GlassTabItem(
+            icon: Icons.home_outlined,
+            selectedIcon: Icons.home_rounded,
+            label: 'ホーム',
+            symbol: 'house',
+            selectedSymbol: 'house.fill',
+          ),
+          GlassTabItem(
+            icon: Icons.forum_outlined,
+            selectedIcon: Icons.forum_rounded,
+            label: 'インタビュー',
+            symbol: 'bubble.left.and.bubble.right',
+            selectedSymbol: 'bubble.left.and.bubble.right.fill',
+          ),
+          GlassTabItem(
+            icon: Icons.lightbulb_outline_rounded,
+            selectedIcon: Icons.lightbulb_rounded,
+            label: 'トピック',
+            symbol: 'lightbulb',
+            selectedSymbol: 'lightbulb.fill',
+          ),
+          GlassTabItem(
+            icon: Icons.person_outline_rounded,
+            selectedIcon: Icons.person_rounded,
+            label: 'マイページ',
+            symbol: 'person',
+            selectedSymbol: 'person.fill',
+          ),
         ],
       ),
     );

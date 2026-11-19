@@ -24,9 +24,7 @@ class VamosSliverAppBar extends StatelessWidget {
       actions: actions,
       flexibleSpace: const Stack(
         children: [
-          Positioned.fill(
-            child: GlassSurface(fallbackShadow: null, fallbackBorder: false, child: SizedBox.expand()),
-          ),
+          Positioned.fill(child: ScrollEdgeBackground()),
           Align(
             alignment: Alignment.topCenter,
             child: SizedBox(
