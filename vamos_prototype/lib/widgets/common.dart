@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../data/repository.dart';
 import '../theme/vamos_theme.dart';
+import 'glass.dart';
 
-/// 画面上部のヘッダー（白地＋ロゴ＋水色グラデーションの細線）。
+/// 画面上部のヘッダー（ロゴ＋水色グラデーションの細線）。
+/// iOS 26 以降はリキッドグラス、それ以外は白地で表示する。
 class VamosSliverAppBar extends StatelessWidget {
   const VamosSliverAppBar({super.key, this.actions = const []});
 
@@ -15,17 +17,37 @@ class VamosSliverAppBar extends StatelessWidget {
       pinned: true,
       toolbarHeight: 56,
       titleSpacing: 20,
+      backgroundColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      scrolledUnderElevation: 0,
       title: Image.asset('assets/vamos/images/logo.png', height: 30, semanticLabel: 'VAMOS'),
       actions: actions,
-      flexibleSpace: const Align(
-        alignment: Alignment.topCenter,
-        child: SizedBox(
-          height: 3,
-          width: double.infinity,
-          child: DecoratedBox(decoration: BoxDecoration(gradient: VamosColors.gradient)),
-        ),
+      flexibleSpace: const Stack(
+        children: [
+          Positioned.fill(
+            child: GlassSurface(fallbackShadow: null, fallbackBorder: false, child: SizedBox.expand()),
+          ),
+          Align(
+            alignment: Alignment.topCenter,
+            child: SizedBox(
+              height: 3,
+              width: double.infinity,
+              child: DecoratedBox(decoration: BoxDecoration(gradient: VamosColors.gradient)),
+            ),
+          ),
+        ],
       ),
     );
+  }
+}
+
+/// 浮いたタブバーの下に隠れないよう、一覧の最後に入れる余白
+class BottomBarSpacer extends StatelessWidget {
+  const BottomBarSpacer({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverToBoxAdapter(child: SizedBox(height: MediaQuery.paddingOf(context).bottom + 12));
   }
 }
 

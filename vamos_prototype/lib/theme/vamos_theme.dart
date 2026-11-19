@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// RE_VAMOS の style.css（:root）に合わせた色。
 abstract final class VamosColors {
@@ -61,6 +62,8 @@ ThemeData buildVamosTheme() {
       displayColor: VamosColors.text,
     ),
     appBarTheme: const AppBarTheme(
+      // ヘッダーが半透明（リキッドグラス）でも、時刻や電池のアイコンを黒で表示する
+      systemOverlayStyle: SystemUiOverlayStyle.dark,
       backgroundColor: VamosColors.surface,
       foregroundColor: VamosColors.text,
       surfaceTintColor: Colors.transparent,

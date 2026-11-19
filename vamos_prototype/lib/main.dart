@@ -9,6 +9,7 @@ import 'screens/my_page_screen.dart';
 import 'screens/topic_screens.dart';
 import 'services/push_service.dart';
 import 'theme/vamos_theme.dart';
+import 'widgets/glass.dart';
 
 void main() {
   runApp(const VamosApp());
@@ -57,6 +58,8 @@ class _RootScreenState extends State<RootScreen> {
   }
 
   Future<void> _start() async {
+    // リキッドグラスが使えるか確認（iOS 26 以降で「透明度を下げる」がオフ）
+    await GlassSupport.init();
     // ログイン状態・保存した記事を戻してから、最新のデータを取得する
     await _repository.restore();
     await _repository.refresh();
@@ -101,6 +104,8 @@ class _VamosShellState extends State<VamosShell> {
   Widget build(BuildContext context) {
     final feed = widget.feed;
     return Scaffold(
+      // 記事がタブバーの下まで流れ、ガラス越しに透けて見えるようにする
+      extendBody: true,
       body: IndexedStack(
         index: _tab,
         children: [
@@ -110,31 +115,15 @@ class _VamosShellState extends State<VamosShell> {
           MyPageScreen(feed: feed),
         ],
       ),
-      bottomNavigationBar: DecoratedBox(
-        decoration: const BoxDecoration(border: Border(top: BorderSide(color: VamosColors.borderLight))),
-        child: NavigationBar(
-          selectedIndex: _tab,
-          onDestinationSelected: (tab) => setState(() => _tab = tab),
-          height: 64,
-          destinations: const [
-            NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home_rounded), label: 'ホーム'),
-            NavigationDestination(
-              icon: Icon(Icons.forum_outlined),
-              selectedIcon: Icon(Icons.forum_rounded),
-              label: 'インタビュー',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.lightbulb_outline_rounded),
-              selectedIcon: Icon(Icons.lightbulb_rounded),
-              label: 'トピック',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.person_outline_rounded),
-              selectedIcon: Icon(Icons.person_rounded),
-              label: 'マイページ',
-            ),
-          ],
-        ),
+      bottomNavigationBar: GlassTabBar(
+        selectedIndex: _tab,
+        onSelected: (tab) => setState(() => _tab = tab),
+        items: const [
+          GlassTabItem(icon: Icons.home_outlined, selectedIcon: Icons.home_rounded, label: 'ホーム'),
+          GlassTabItem(icon: Icons.forum_outlined, selectedIcon: Icons.forum_rounded, label: 'インタビュー'),
+          GlassTabItem(icon: Icons.lightbulb_outline_rounded, selectedIcon: Icons.lightbulb_rounded, label: 'トピック'),
+          GlassTabItem(icon: Icons.person_outline_rounded, selectedIcon: Icons.person_rounded, label: 'マイページ'),
+        ],
       ),
     );
   }

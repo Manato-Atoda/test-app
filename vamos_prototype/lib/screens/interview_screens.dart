@@ -7,6 +7,7 @@ import '../theme/vamos_theme.dart';
 import '../widgets/cards.dart';
 import '../widgets/common.dart';
 import '../widgets/content_blocks.dart';
+import '../widgets/glass.dart';
 import 'search_screen.dart';
 
 void openInterview(BuildContext context, Interview interview) {
@@ -53,6 +54,7 @@ class InterviewListScreen extends StatelessWidget {
               ),
             ),
           ),
+          const BottomBarSpacer(),
         ],
       ),
     );
@@ -81,7 +83,9 @@ class _InterviewDetailScreenState extends State<InterviewDetailScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: VamosColors.surface,
-      appBar: AppBar(
+      // 本文がヘッダーの下まで流れ、ガラス越しに透けて見えるようにする
+      extendBodyBehindAppBar: true,
+      appBar: GlassAppBar(
         title: Image.asset('assets/vamos/images/logo.png', height: 26, semanticLabel: 'VAMOS'),
         actions: [
           FutureBuilder<Interview>(
@@ -113,7 +117,7 @@ class _InterviewDetailScreenState extends State<InterviewDetailScreen> {
           }
           if (interview == null) return const Center(child: CircularProgressIndicator());
           return ListView(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 48),
+            padding: EdgeInsets.fromLTRB(20, MediaQuery.paddingOf(context).top + 16, 20, 48),
             children: [
               const Align(alignment: Alignment.centerLeft, child: CategoryChip('インタビュー', style: ChipStyle.filled)),
               const SizedBox(height: 14),

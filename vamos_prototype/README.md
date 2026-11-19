@@ -15,6 +15,7 @@ Web マガジン「Vamos」をアプリにできるかを確かめるための�
 | ディープリンク | `vamos://app/interviews/<slug>`、`vamos://app/topics/<id>` で該当ページを開く |
 | 保存 | インタビューを保存してマイページに一覧表示。保存した記事は本文も端末に残り、オフラインでも読める |
 | 外部リンク・共有 | トピックのリンクをアプリ内ブラウザで開く。記事を端末の共有シート（LINE・X など）で共有 |
+| リキッドグラス（iOS 26 以降） | 下部の浮いたタブバーと上部ヘッダーに iOS 本物のガラス（UIGlassEffect）を使う。Android・古い iOS・「透明度を下げる」がオンのときは、白い面の Vamos デザインで表示 |
 
 ## 使っているライブラリ
 
@@ -49,7 +50,7 @@ vamos_prototype/
 │   ├── services/              # プッシュ通知（ネイティブとの橋渡し）
 │   ├── widgets/               # 共通部品（カード、ボタン、本文の描画）
 │   └── screens/               # 各画面（ホーム・インタビュー・トピック・検索・会員・マイページ）
-├── ios/Runner/AppDelegate.swift  # 通知の許可・タップを Dart へ渡す VamosPushPlugin
+├── ios/Runner/AppDelegate.swift  # 通知（VamosPushPlugin）とリキッドグラス（VamosGlassPlugin）
 ├── tool/
 │   ├── import_vamos_data.py   # RE_VAMOS からサンプルデータを書き出す
 │   └── mock_api_server.py     # モックAPI（標準ライブラリのみ）

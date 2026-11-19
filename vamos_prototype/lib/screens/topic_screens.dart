@@ -6,6 +6,7 @@ import '../theme/vamos_theme.dart';
 import '../widgets/cards.dart';
 import '../widgets/common.dart';
 import '../widgets/content_blocks.dart';
+import '../widgets/glass.dart';
 import 'search_screen.dart';
 
 void openTopic(BuildContext context, Topic topic) {
@@ -75,6 +76,7 @@ class _TopicListScreenState extends State<TopicListScreen> {
                   TopicCard(topic: topics[index], onTap: () => openTopic(context, topics[index])),
             ),
           ),
+          const BottomBarSpacer(),
         ],
       ),
     );
@@ -130,7 +132,8 @@ class TopicDetailScreen extends StatelessWidget {
     final known = topic;
     return Scaffold(
       backgroundColor: VamosColors.surface,
-      appBar: AppBar(title: Image.asset('assets/vamos/images/logo.png', height: 26, semanticLabel: 'VAMOS')),
+      extendBodyBehindAppBar: true,
+      appBar: GlassAppBar(title: Image.asset('assets/vamos/images/logo.png', height: 26, semanticLabel: 'VAMOS')),
       body: known != null
           ? _TopicBody(topic: known)
           : FutureBuilder<Topic>(
@@ -154,7 +157,7 @@ class _TopicBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 48),
+      padding: EdgeInsets.fromLTRB(20, MediaQuery.paddingOf(context).top + 16, 20, 48),
       children: [
         if (topic.category != null)
           Align(
