@@ -1,0 +1,29 @@
+name: vamos_prototype
+description: "VAMOS アプリの試作（RE_VAMOS のデザインとデータを参照）"
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  # tool/import_vamos_data.py で RE_VAMOS から書き出すデータ（Git 管理外）
+  assets:
+    - assets/vamos/data/
+    - assets/vamos/images/
+    - assets/vamos/images/hero/
+    - assets/vamos/images/body/
+    - assets/vamos/images/avatar/

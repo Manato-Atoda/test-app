@@ -36,8 +36,9 @@ test-app/
 ├── TestAppTests/                 # ユニットテスト (Swift Testing)
 │   └── Features/Counter/
 │       └── CounterViewModelTests.swift
-└── scripts/
-    └── build.sh                  # コマンドラインでのビルド / テスト用
+├── scripts/
+│   └── build.sh                  # コマンドラインでのビルド / テスト用
+└── vamos_prototype/              # VAMOS アプリの Flutter 試作（詳細は同フォルダの README）
 ```
 
 `TestApp/` と `TestAppTests/` は Xcode の「フォルダ同期グループ」として登録されています。

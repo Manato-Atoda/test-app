@@ -19,3 +19,6 @@ DerivedData/
 # Swift Package Manager
 .build/
 .swiftpm/
+
+# VAMOS 試作：参照元からコピーした記事と写真
+vamos_prototype/assets/vamos/
