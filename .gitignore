@@ -1,0 +1,21 @@
+# macOS
+.DS_Store
+
+# Xcode のユーザー固有ファイル
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+
+# ビルド成果物
+build/
+DerivedData/
+*.ipa
+*.dSYM
+*.dSYM.zip
+*.xcarchive
+*.xcresult
+
+# Swift Package Manager
+.build/
+.swiftpm/
