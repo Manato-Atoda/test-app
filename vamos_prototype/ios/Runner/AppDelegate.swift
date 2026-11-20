@@ -173,10 +173,12 @@ final class VamosPushPlugin: NSObject, FlutterPlugin {
     }
   }
 
-  private func finishPermission(token: String?) {
+  private func finishPermission(token: String?, error: String? = nil) {
     guard let result = permissionResult else { return }
     permissionResult = nil
-    result(Self.response(granted: true, token: token))
+    var response = Self.response(granted: true, token: token)
+    if let error { response["error"] = error }
+    result(response)
   }
 
   private static func response(granted: Bool, token: String?) -> [String: Any] {
@@ -203,7 +205,8 @@ final class VamosPushPlugin: NSObject, FlutterPlugin {
   }
 
   func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
-    finishPermission(token: nil)
+    // 無料の Apple ID で署名した実機では、プッシュ通知の権限（aps-environment）がないためここに来る
+    finishPermission(token: nil, error: error.localizedDescription)
   }
 
   // MARK: - UNUserNotificationCenterDelegate

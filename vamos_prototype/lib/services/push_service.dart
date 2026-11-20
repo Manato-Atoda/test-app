@@ -48,11 +48,18 @@ abstract final class PushService {
     final result = await _channel.invokeMapMethod<String, Object?>('requestPermission') ?? const {};
     final granted = result['granted'] == true;
     final simulator = result['simulator'] == true;
-    final token = result['token'] as String? ?? 'simulator-${Random().nextInt(1 << 32).toRadixString(16)}';
+    final apnsToken = result['token'] as String?;
+    if (granted && !simulator && apnsToken == null) {
+      // 実機でトークンが取れない＝プッシュ通知の権限がない署名（無料の Apple ID）で入れた場合
+      debugPrint('APNs に登録できませんでした: ${result['error']}');
+      throw UnsupportedError(
+        'この iPhone ではプッシュ通知を受け取れません。無料の Apple ID で入れた試作版は、プッシュ通知を使えないためです。',
+      );
+    }
     return PushRegistration(
       granted: granted,
       platform: simulator ? 'ios-simulator' : 'ios',
-      token: token,
+      token: apnsToken ?? 'simulator-${Random().nextInt(1 << 32).toRadixString(16)}',
     );
   }
 

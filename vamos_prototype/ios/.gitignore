@@ -32,3 +32,6 @@ Runner/GeneratedPluginRegistrant.*
 !default.mode2v3
 !default.pbxuser
 !default.perspectivev3
+
+# 実機用の署名チーム（各自の Apple ID のチーム）
+Flutter/Signing.xcconfig

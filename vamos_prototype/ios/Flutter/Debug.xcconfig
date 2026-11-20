@@ -1,1 +1,4 @@
 #include "Generated.xcconfig"
+
+// 実機に入れるときの署名チーム（各自の Apple ID のチーム）。Git には含めない
+#include? "Signing.xcconfig"
