@@ -4,6 +4,7 @@ import '../api/models.dart';
 import '../state/app_scope.dart';
 import '../widgets/common.dart';
 import '../widgets/post_card.dart';
+import '../widgets/glass.dart';
 
 /// 投稿の検索（自分が見られるチャンネルの投稿のみ）。
 class SearchScreen extends StatefulWidget {
@@ -58,7 +59,7 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget build(BuildContext context) {
     final results = _results;
     return Scaffold(
-      appBar: AppBar(
+      appBar: GlassAppBar(
         title: TextField(
           controller: _query,
           autofocus: true,

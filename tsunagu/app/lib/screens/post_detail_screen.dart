@@ -8,6 +8,7 @@ import '../widgets/common.dart';
 import '../widgets/post_card.dart';
 import '../widgets/rich_body.dart';
 import 'user_profile_screen.dart';
+import '../widgets/glass.dart';
 
 class PostDetailScreen extends StatefulWidget {
   const PostDetailScreen({
@@ -200,7 +201,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text(post == null ? '投稿' : '#${post.channel.name}')),
+      appBar: GlassAppBar(title: Text(post == null ? '投稿' : '#${post.channel.name}')),
       body: SafeArea(
         child: Column(
           children: [

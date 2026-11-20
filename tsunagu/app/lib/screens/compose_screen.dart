@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import '../api/models.dart';
 import '../state/app_scope.dart';
 import '../widgets/common.dart';
+import '../widgets/glass.dart';
 
 /// 投稿の作成。投稿できたら [Post] を返して閉じる。
 class ComposeScreen extends StatefulWidget {
@@ -105,10 +106,7 @@ class _ComposeScreenState extends State<ComposeScreen> {
     } else if (channels == null) {
       content = const Center(child: CircularProgressIndicator());
     } else if (channels.isEmpty) {
-      content = const MessageView(
-        icon: Icons.block,
-        message: '投稿できるチャンネルがありません。\nチャンネル一覧から参加してください。',
-      );
+      content = const MessageView(icon: Icons.block, message: '投稿できるチャンネルがありません。\nチャンネル一覧から参加してください。');
     } else {
       content = ListView(
         padding: const EdgeInsets.all(16),
@@ -122,10 +120,7 @@ class _ComposeScreenState extends State<ComposeScreen> {
                   decoration: const InputDecoration(labelText: '投稿先チャンネル', prefixIcon: Icon(Icons.tag)),
                   items: [
                     for (final c in channels)
-                      DropdownMenuItem(
-                        value: c.id,
-                        child: Text(c.isPrivate ? '${c.name}（非公開）' : c.name),
-                      ),
+                      DropdownMenuItem(value: c.id, child: Text(c.isPrivate ? '${c.name}（非公開）' : c.name)),
                   ],
                   onChanged: _busy ? null : (v) => setState(() => _channelId = v),
                 ),
@@ -192,17 +187,25 @@ class _ComposeScreenState extends State<ComposeScreen> {
         if (await _confirmDiscard()) navigator.pop();
       },
       child: Scaffold(
-        appBar: AppBar(
+        appBar: GlassAppBar(
           title: const Text('新しい投稿'),
           actions: [
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: FilledButton(
-                onPressed: _canSubmit ? _submit : null,
-                child: _busy
-                    ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('投稿する'),
-              ),
+            GlassBuilder(
+              builder: (context, glass) => glass
+                  ? GlassButton(
+                      label: '投稿する',
+                      style: GlassButtonStyle.prominent,
+                      onPressed: _canSubmit ? _submit : null,
+                    )
+                  : Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: FilledButton(
+                        onPressed: _canSubmit ? _submit : null,
+                        child: _busy
+                            ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Text('投稿する'),
+                      ),
+                    ),
             ),
           ],
         ),

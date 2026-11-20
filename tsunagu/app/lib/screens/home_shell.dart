@@ -10,6 +10,7 @@ import 'compose_screen.dart';
 import 'menu_screen.dart';
 import 'notifications_screen.dart';
 import 'search_screen.dart';
+import '../widgets/glass.dart';
 
 /// ログイン後のメイン画面。広い画面は左のレール、狭い画面は下のバーで切り替える。
 class HomeShell extends StatefulWidget {
@@ -68,9 +69,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   }
 
   Future<void> _compose() async {
-    final post = await Navigator.of(context).push<Post>(
-      MaterialPageRoute(builder: (_) => const ComposeScreen(), fullscreenDialog: true),
-    );
+    final post = await Navigator.of(context)
+        .push<Post>(MaterialPageRoute(builder: (_) => const ComposeScreen(), fullscreenDialog: true));
     if (post == null) return;
     _homeFeed.insertNew(post);
     if (post.isAnnouncement) _announcements.insertNew(post);
@@ -90,11 +90,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         emptyMessage: 'まだ投稿はありません。\n右下のボタンから最初の投稿をしてみましょう。',
       ),
       const ChannelsScreen(),
-      _FeedPage(
-        title: 'お知らせ',
-        controller: _announcements,
-        emptyMessage: 'お知らせはまだありません。',
-      ),
+      _FeedPage(title: 'お知らせ', controller: _announcements, emptyMessage: 'お知らせはまだありません。'),
       NotificationsScreen(key: _notificationsKey),
       const MenuScreen(),
     ];
@@ -107,9 +103,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       (icon: Icons.menu, selected: Icons.menu, label: 'メニュー', badge: 0),
     ];
 
-    Widget icon(IconData data, int badge) => badge > 0
-        ? Badge(label: Text(badge > 99 ? '99+' : '$badge'), child: Icon(data))
-        : Icon(data);
+    Widget icon(IconData data, int badge) =>
+        badge > 0 ? Badge(label: Text(badge > 99 ? '99+' : '$badge'), child: Icon(data)) : Icon(data);
 
     final body = IndexedStack(index: _index, children: pages);
 
@@ -149,6 +144,46 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       );
     }
 
+    return GlassBuilder(
+      builder: (context, glass) => glass
+          // iOS 26 以降: 本物のリキッドグラスのタブバー。内容はタブバーの下まで流れる
+          ? Scaffold(
+              extendBody: true,
+              body: GlassTabBarInset(height: GlassTabBarInset.tabBarHeight, child: body),
+              bottomNavigationBar: GlassTabBar(
+                selectedIndex: _index,
+                onSelected: _select,
+                items: [
+                  for (final (i, d) in destinations.indexed)
+                    GlassTabItem(
+                      label: d.label,
+                      icon: d.icon,
+                      selectedIcon: d.selected,
+                      symbol: _symbols[i].$1,
+                      selectedSymbol: _symbols[i].$2,
+                      badge: d.badge,
+                    ),
+                ],
+              ),
+            )
+          : _materialShell(body, destinations, icon),
+    );
+  }
+
+  /// SF Symbols（iOS のタブバーのアイコン）
+  static const _symbols = [
+    ('house', 'house.fill'),
+    ('number', 'number'),
+    ('megaphone', 'megaphone.fill'),
+    ('bell', 'bell.fill'),
+    ('line.3.horizontal', 'line.3.horizontal'),
+  ];
+
+  Widget _materialShell(
+    Widget body,
+    List<({IconData icon, IconData selected, String label, int badge})> destinations,
+    Widget Function(IconData, int) icon,
+  ) {
     return Scaffold(
       body: body,
       bottomNavigationBar: NavigationBar(
@@ -156,11 +191,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         onDestinationSelected: _select,
         destinations: [
           for (final d in destinations)
-            NavigationDestination(
-              icon: icon(d.icon, d.badge),
-              selectedIcon: icon(d.selected, d.badge),
-              label: d.label,
-            ),
+            NavigationDestination(icon: icon(d.icon, d.badge), selectedIcon: icon(d.selected, d.badge), label: d.label),
         ],
       ),
     );
@@ -168,12 +199,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 }
 
 class _FeedPage extends StatelessWidget {
-  const _FeedPage({
-    required this.title,
-    required this.controller,
-    required this.emptyMessage,
-    this.onCompose,
-  });
+  const _FeedPage({required this.title, required this.controller, required this.emptyMessage, this.onCompose});
 
   final String title;
   final FeedController controller;
@@ -183,33 +209,26 @@ class _FeedPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final company = AppScope.of(context).company;
-    return Scaffold(
-      appBar: AppBar(
+    return GlassScaffold(
+      scrollUnderBars: true,
+      appBar: GlassAppBar(
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(title),
-            if (company != null)
-              Text(company.name, style: Theme.of(context).textTheme.bodySmall),
+            if (company != null) Text(company.name, style: Theme.of(context).textTheme.bodySmall),
           ],
         ),
         actions: [
-          IconButton(
+          GlassButton(
+            symbol: 'magnifyingglass',
+            icon: Icons.search,
             tooltip: '投稿を検索',
-            icon: const Icon(Icons.search),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const SearchScreen()),
-            ),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SearchScreen())),
           ),
         ],
       ),
-      floatingActionButton: onCompose == null
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: onCompose,
-              icon: const Icon(Icons.edit_outlined),
-              label: const Text('投稿'),
-            ),
+      floatingActionButton: onCompose == null ? null : GlassComposeButton(onPressed: onCompose!),
       body: FeedView(controller: controller, emptyMessage: emptyMessage),
     );
   }

@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../state/app_scope.dart';
 import '../widgets/common.dart';
+import '../widgets/glass.dart';
 
 /// 社内SNS利用ガイドライン（会社の管理者が設定）。
 class GuidelinesScreen extends StatefulWidget {
@@ -42,12 +43,12 @@ class _GuidelinesScreenState extends State<GuidelinesScreen> {
         : 'ガイドラインはまだ設定されていません。';
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: GlassAppBar(
         title: const Text('利用ガイドライン'),
         automaticallyImplyLeading: widget.readOnly,
         actions: [
           if (!widget.readOnly)
-            TextButton(onPressed: _busy ? null : () => state.logout(), child: const Text('ログアウト')),
+            GlassButton(label: 'ログアウト', onPressed: _busy ? null : () => state.logout()),
         ],
       ),
       body: SafeArea(

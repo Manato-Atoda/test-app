@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../state/app_scope.dart';
 import '../widgets/common.dart';
+import '../widgets/glass.dart';
 
 class ProfileEditScreen extends StatefulWidget {
   const ProfileEditScreen({super.key});
@@ -48,12 +49,12 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     final me = AppScope.of(context).me;
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(
+      appBar: GlassAppBar(
         title: const Text('プロフィール'),
         actions: [
           Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: FilledButton(onPressed: _busy ? null : _save, child: const Text('保存')),
+            padding: const EdgeInsets.only(right: 8),
+            child: GlassButton(label: '保存', style: GlassButtonStyle.prominent, onPressed: _busy ? null : _save),
           ),
         ],
       ),

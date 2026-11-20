@@ -7,6 +7,7 @@ import '../api/models.dart';
 import '../state/app_scope.dart';
 import '../widgets/common.dart';
 import 'user_profile_screen.dart';
+import '../widgets/glass.dart';
 
 /// 社員名簿（在籍者のみ）。
 class DirectoryScreen extends StatefulWidget {
@@ -95,7 +96,7 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
       );
     }
     return Scaffold(
-      appBar: AppBar(title: const Text('社員名簿')),
+      appBar: GlassAppBar(title: const Text('社員名簿')),
       body: Column(
         children: [
           ContentWidth(

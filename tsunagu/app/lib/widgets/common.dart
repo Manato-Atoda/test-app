@@ -17,7 +17,8 @@ class ContentWidth extends StatelessWidget {
       alignment: Alignment.topCenter,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxWidth),
-        child: child,
+        // 中身が小さくても、最大幅（狭い画面では画面幅）いっぱいに広げる
+        child: SizedBox(width: double.infinity, child: child),
       ),
     );
   }

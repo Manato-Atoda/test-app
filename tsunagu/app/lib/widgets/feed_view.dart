@@ -4,6 +4,7 @@ import '../api/api_client.dart';
 import '../api/models.dart';
 import 'common.dart';
 import 'post_card.dart';
+import 'glass.dart';
 
 /// タイムラインの読み込み状態（無限スクロール・引っ張って更新）。
 class FeedController extends ChangeNotifier {
@@ -143,10 +144,11 @@ class _FeedViewState extends State<FeedView> {
         final itemCount = c.posts.length + (widget.header != null ? 1 : 0) + 1;
         return RefreshIndicator(
           onRefresh: c.refresh,
+          edgeOffset: MediaQuery.paddingOf(context).top,
           child: ListView.builder(
             controller: _scroll,
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
+            padding: scrollPadding(context, const EdgeInsets.fromLTRB(12, 8, 12, 96)),
             itemCount: itemCount,
             itemBuilder: (context, index) {
               var i = index;

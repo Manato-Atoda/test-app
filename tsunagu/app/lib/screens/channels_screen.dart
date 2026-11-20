@@ -6,6 +6,7 @@ import '../state/app_scope.dart';
 import '../widgets/common.dart';
 import '../widgets/feed_view.dart';
 import 'compose_screen.dart';
+import '../widgets/glass.dart';
 
 /// チャンネル一覧（参加中 / 参加できる公開チャンネル）。
 class ChannelsScreen extends StatefulWidget {
@@ -68,20 +69,24 @@ class _ChannelsScreenState extends State<ChannelsScreen> {
       final joined = channels.where((c) => c.isMember && !c.archived).toList();
       final others = channels.where((c) => !c.isMember && !c.archived).toList();
       final archived = channels.where((c) => c.archived).toList();
-      body = RefreshIndicator(
-        onRefresh: _load,
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.only(bottom: 24),
-          children: [
-            _Section('参加中のチャンネル', joined, onTap: _open),
-            if (others.isNotEmpty) _Section('参加できるチャンネル', others, onTap: _open),
-            if (archived.isNotEmpty) _Section('アーカイブ済み', archived, onTap: _open),
-          ],
+      // 余白はバーの高さに合わせるので、Scaffold の中の context で作る
+      body = Builder(
+        builder: (context) => RefreshIndicator(
+          onRefresh: _load,
+          edgeOffset: MediaQuery.paddingOf(context).top,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: scrollPadding(context, const EdgeInsets.only(bottom: 24)),
+            children: [
+              _Section('参加中のチャンネル', joined, onTap: _open),
+              if (others.isNotEmpty) _Section('参加できるチャンネル', others, onTap: _open),
+              if (archived.isNotEmpty) _Section('アーカイブ済み', archived, onTap: _open),
+            ],
+          ),
         ),
       );
     }
-    return Scaffold(appBar: AppBar(title: const Text('チャンネル')), body: body);
+    return GlassScaffold(scrollUnderBars: true, appBar: const GlassAppBar(title: Text('チャンネル')), body: body);
   }
 }
 
@@ -196,26 +201,23 @@ class _ChannelFeedScreenState extends State<ChannelFeedScreen> {
   Widget build(BuildContext context) {
     final c = _channel;
     final canToggle = !c.companyWide && !c.archived && (!c.isPrivate || c.isMember);
-    return Scaffold(
-      appBar: AppBar(
+    return GlassScaffold(
+      scrollUnderBars: true,
+      appBar: GlassAppBar(
         title: Text('#${c.name}'),
         actions: [
           if (canToggle)
             Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: c.isMember
-                  ? OutlinedButton(onPressed: _busy ? null : _toggleMembership, child: const Text('退出'))
-                  : FilledButton(onPressed: _busy ? null : _toggleMembership, child: const Text('参加する')),
+              padding: const EdgeInsets.only(right: 4),
+              child: GlassButton(
+                label: c.isMember ? '退出' : '参加する',
+                style: c.isMember ? GlassButtonStyle.outlined : GlassButtonStyle.prominent,
+                onPressed: _busy ? null : _toggleMembership,
+              ),
             ),
         ],
       ),
-      floatingActionButton: c.canPost && !c.archived
-          ? FloatingActionButton.extended(
-              onPressed: _compose,
-              icon: const Icon(Icons.edit_outlined),
-              label: const Text('投稿'),
-            )
-          : null,
+      floatingActionButton: c.canPost && !c.archived ? GlassComposeButton(onPressed: _compose) : null,
       body: FeedView(
         controller: _feed,
         showChannel: false,

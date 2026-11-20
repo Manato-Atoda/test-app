@@ -6,6 +6,7 @@ import '../state/app_scope.dart';
 import '../utils/format.dart';
 import '../widgets/common.dart';
 import 'post_detail_screen.dart';
+import '../widgets/glass.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -96,9 +97,7 @@ class NotificationsScreenState extends State<NotificationsScreen> {
     }
     final postId = n.postId;
     if (postId == null) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => PostDetailScreen(postId: postId)),
-    );
+    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => PostDetailScreen(postId: postId)));
   }
 
   IconData _icon(String type) => switch (type) {
@@ -123,56 +122,61 @@ class NotificationsScreenState extends State<NotificationsScreen> {
             )
           : const Center(child: CircularProgressIndicator());
     } else {
-      body = RefreshIndicator(
-        onRefresh: refresh,
-        child: _items.isEmpty
-            ? ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                children: const [
-                  SizedBox(height: 80),
-                  MessageView(icon: Icons.notifications_none, message: '通知はありません。'),
-                ],
-              )
-            : ListView.builder(
-                physics: const AlwaysScrollableScrollPhysics(),
-                itemCount: _items.length + (_nextBefore != null ? 1 : 0),
-                itemBuilder: (context, i) {
-                  if (i >= _items.length) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) => _loadMore());
-                    return const LoadingFooter();
-                  }
-                  final n = _items[i];
-                  return ContentWidth(
-                    child: ListTile(
-                      tileColor: n.read ? null : theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
-                      leading: n.actor != null
-                          ? Badge(
-                              backgroundColor: theme.colorScheme.primary,
-                              isLabelVisible: true,
-                              label: Icon(_icon(n.type), size: 10, color: Colors.white),
-                              child: UserAvatar(user: n.actor!),
-                            )
-                          : Icon(_icon(n.type)),
-                      title: Text(n.description),
-                      subtitle: Text(
-                        [if (n.excerpt.isNotEmpty) n.excerpt, relativeTime(n.createdAt)].join('\n'),
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
+      // 余白はバーの高さに合わせるので、Scaffold の中の context で作る
+      body = Builder(
+        builder: (context) => RefreshIndicator(
+          onRefresh: refresh,
+          edgeOffset: MediaQuery.paddingOf(context).top,
+          child: _items.isEmpty
+              ? ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: scrollPadding(context, EdgeInsets.zero),
+                  children: const [
+                    SizedBox(height: 80),
+                    MessageView(icon: Icons.notifications_none, message: '通知はありません。'),
+                  ],
+                )
+              : ListView.builder(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: scrollPadding(context, EdgeInsets.zero),
+                  itemCount: _items.length + (_nextBefore != null ? 1 : 0),
+                  itemBuilder: (context, i) {
+                    if (i >= _items.length) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) => _loadMore());
+                      return const LoadingFooter();
+                    }
+                    final n = _items[i];
+                    return ContentWidth(
+                      child: ListTile(
+                        tileColor: n.read ? null : theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
+                        leading: n.actor != null
+                            ? Badge(
+                                backgroundColor: theme.colorScheme.primary,
+                                isLabelVisible: true,
+                                label: Icon(_icon(n.type), size: 10, color: Colors.white),
+                                child: UserAvatar(user: n.actor!),
+                              )
+                            : Icon(_icon(n.type)),
+                        title: Text(n.description),
+                        subtitle: Text(
+                          [if (n.excerpt.isNotEmpty) n.excerpt, relativeTime(n.createdAt)].join('\n'),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        isThreeLine: n.excerpt.isNotEmpty,
+                        onTap: () => _open(i),
                       ),
-                      isThreeLine: n.excerpt.isNotEmpty,
-                      onTap: () => _open(i),
-                    ),
-                  );
-                },
-              ),
+                    );
+                  },
+                ),
+        ),
       );
     }
-    return Scaffold(
-      appBar: AppBar(
+    return GlassScaffold(
+      scrollUnderBars: true,
+      appBar: GlassAppBar(
         title: const Text('通知'),
-        actions: [
-          if (hasUnread) TextButton(onPressed: _readAll, child: const Text('すべて既読')),
-        ],
+        actions: [if (hasUnread) GlassButton(label: 'すべて既読', onPressed: _readAll)],
       ),
       body: body,
     );

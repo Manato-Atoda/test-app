@@ -5,6 +5,7 @@ import '../api/models.dart';
 import '../state/app_scope.dart';
 import '../widgets/common.dart';
 import '../widgets/post_card.dart';
+import '../widgets/glass.dart';
 
 /// 社員のプロフィールと最近の投稿。
 class UserProfileScreen extends StatefulWidget {
@@ -117,6 +118,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
         ),
       );
     }
-    return Scaffold(appBar: AppBar(title: const Text('プロフィール')), body: body);
+    return Scaffold(appBar: GlassAppBar(title: const Text('プロフィール')), body: body);
   }
 }

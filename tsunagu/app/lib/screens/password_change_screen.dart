@@ -5,6 +5,7 @@ import '../api/models.dart';
 import '../state/app_scope.dart';
 import '../utils/password_rules.dart';
 import '../widgets/common.dart';
+import '../widgets/glass.dart';
 
 /// パスワードの再設定（初回ログイン・仮パスワード再発行後）と任意の変更。
 class PasswordChangeScreen extends StatefulWidget {
@@ -95,15 +96,12 @@ class _PasswordChangeScreenState extends State<PasswordChangeScreen> {
     final ready = checks.every((c) => c.ok) && (!_needsCurrent || _current.text.isNotEmpty);
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: GlassAppBar(
         title: Text(widget.voluntary ? 'パスワードの変更' : 'パスワードの設定'),
         automaticallyImplyLeading: widget.voluntary,
         actions: [
           if (!widget.voluntary)
-            TextButton(
-              onPressed: _busy ? null : () => state.logout(),
-              child: const Text('ログアウト'),
-            ),
+            GlassButton(label: 'ログアウト', onPressed: _busy ? null : () => state.logout()),
         ],
       ),
       body: SafeArea(

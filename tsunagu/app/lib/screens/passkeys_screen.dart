@@ -7,6 +7,7 @@ import '../services/passkey_flow.dart';
 import '../state/app_scope.dart';
 import '../utils/format.dart';
 import '../widgets/common.dart';
+import '../widgets/glass.dart';
 
 class PasskeysScreen extends StatefulWidget {
   const PasskeysScreen({super.key});
@@ -91,7 +92,7 @@ class _PasskeysScreenState extends State<PasskeysScreen> {
     final theme = Theme.of(context);
     final list = _passkeys;
     return Scaffold(
-      appBar: AppBar(title: const Text('パスキー')),
+      appBar: GlassAppBar(title: const Text('パスキー')),
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [

@@ -4,6 +4,7 @@ import '../api/api_client.dart';
 import '../api/models.dart';
 import '../state/app_scope.dart';
 import '../widgets/common.dart';
+import '../widgets/glass.dart';
 
 /// お知らせの確認状況（投稿者・管理者のみ）。
 class AcksScreen extends StatefulWidget {
@@ -44,7 +45,7 @@ class _AcksScreenState extends State<AcksScreen> {
     final s = _status;
     if (s == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('確認状況')),
+        appBar: GlassAppBar(title: const Text('確認状況')),
         body: _error != null
             ? MessageView(
                 icon: Icons.error_outline,
@@ -59,7 +60,7 @@ class _AcksScreenState extends State<AcksScreen> {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        appBar: AppBar(
+        appBar: GlassAppBar(
           title: Text('確認状況（${s.acked.length} / $total 人）'),
           bottom: TabBar(
             tabs: [

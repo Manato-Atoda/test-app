@@ -5,6 +5,7 @@ import '../api/models.dart';
 import '../state/app_scope.dart';
 import '../utils/format.dart';
 import '../widgets/common.dart';
+import '../widgets/glass.dart';
 
 /// ログイン中の端末の一覧と、ほかの端末のログアウト。
 class SessionsScreen extends StatefulWidget {
@@ -120,6 +121,6 @@ class _SessionsScreenState extends State<SessionsScreen> {
         ),
       );
     }
-    return Scaffold(appBar: AppBar(title: const Text('ログイン中の端末')), body: body);
+    return Scaffold(appBar: GlassAppBar(title: const Text('ログイン中の端末')), body: body);
   }
 }
