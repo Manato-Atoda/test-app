@@ -138,7 +138,9 @@ class _PasswordChangeScreenState extends State<PasswordChangeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(_error!),
-                        for (final d in _details) Text('・$d'),
+                        // サーバーは 1 件目をメッセージにも入れて返すので、同じ文は重ねて出さない
+                        for (final d in _details)
+                          if (d != _error) Text('・$d'),
                       ],
                     ),
                   ),
