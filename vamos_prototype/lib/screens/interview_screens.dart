@@ -9,6 +9,7 @@ import '../widgets/cards.dart';
 import '../widgets/common.dart';
 import '../widgets/content_blocks.dart';
 import '../widgets/glass.dart';
+import '../widgets/list_detail.dart';
 import 'search_screen.dart';
 
 void openInterview(BuildContext context, Interview interview) {
@@ -18,11 +19,36 @@ void openInterview(BuildContext context, Interview interview) {
   ));
 }
 
-/// 企業インタビュー一覧（引っ張って更新）
+/// 企業インタビュー一覧（引っ張って更新）。
+/// 開いた iPhone Duo などの広い画面では、左に一覧・右に記事を並べる。
 class InterviewListScreen extends StatelessWidget {
-  const InterviewListScreen({super.key, required this.feed});
+  const InterviewListScreen({super.key, required this.feed, this.active = true});
 
   final Feed feed;
+
+  /// 下のタブでこの画面を表示中か
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListDetail<Interview>(
+      items: feed.interviews,
+      active: active,
+      idOf: (interview) => interview.slug,
+      routeNameOf: (interview) => '/interviews/${interview.slug}',
+      listBuilder: (context, selectedId, open) => _InterviewList(feed: feed, selectedId: selectedId, onOpen: open),
+      detailBuilder: (context, interview, options) =>
+          InterviewDetailScreen(slug: interview.slug, preview: interview, paneOptions: options),
+    );
+  }
+}
+
+class _InterviewList extends StatelessWidget {
+  const _InterviewList({required this.feed, required this.selectedId, required this.onOpen});
+
+  final Feed feed;
+  final String? selectedId;
+  final ValueChanged<Interview> onOpen;
 
   @override
   Widget build(BuildContext context) {
@@ -55,7 +81,11 @@ class InterviewListScreen extends StatelessWidget {
                 columns: columns,
                 children: [
                   for (final interview in rows[index])
-                    InterviewCard(interview: interview, onTap: () => openInterview(context, interview)),
+                    InterviewCard(
+                      interview: interview,
+                      selected: interview.slug == selectedId,
+                      onTap: () => onOpen(interview),
+                    ),
                 ],
               ),
             ),
@@ -69,30 +99,45 @@ class InterviewListScreen extends StatelessWidget {
 
 /// 企業インタビューの詳細（吹き出しの対談形式）。本文は API から取得する。
 class InterviewDetailScreen extends StatefulWidget {
-  const InterviewDetailScreen({super.key, required this.slug, this.preview});
+  const InterviewDetailScreen({
+    super.key,
+    required this.slug,
+    this.preview,
+    this.paneOptions = const PaneDetailOptions(embedded: false),
+  });
 
   final String slug;
 
   /// 一覧から開いたときの概要（本文の読み込み中に先に表示する）
   final Interview? preview;
 
+  /// 2 画面表示の右側に置くか、ページとして開くか
+  final PaneDetailOptions paneOptions;
+
   @override
   State<InterviewDetailScreen> createState() => _InterviewDetailScreenState();
 }
 
-class _InterviewDetailScreenState extends State<InterviewDetailScreen> {
+class _InterviewDetailScreenState extends State<InterviewDetailScreen> with PaneDetailMixin {
   late Future<Interview> _future = _load();
+
+  @override
+  PaneDetailOptions get paneOptions => widget.paneOptions;
 
   Future<Interview> _load() => VamosRepository.instance.interview(widget.slug);
 
   @override
   Widget build(BuildContext context) {
+    returnToPaneIfWide();
+    final embedded = widget.paneOptions.embedded;
     return Scaffold(
       backgroundColor: VamosColors.surface,
       // 本文がヘッダーの下まで流れ、ガラス越しに透けて見えるようにする
       extendBodyBehindAppBar: true,
       appBar: GlassAppBar(
-        title: Image.asset('assets/vamos/images/logo.png', height: 26, semanticLabel: 'VAMOS'),
+        // 2 画面表示の右側では、ロゴと戻るボタンは左の一覧にあるので出さない
+        title: embedded ? null : Image.asset('assets/vamos/images/logo.png', height: 26, semanticLabel: 'VAMOS'),
+        showBack: !embedded,
         actions: [
           FutureBuilder<Interview>(
             future: _future,
@@ -123,7 +168,9 @@ class _InterviewDetailScreenState extends State<InterviewDetailScreen> {
             );
           }
           if (interview == null) return const Center(child: CircularProgressIndicator());
+          if (snapshot.data != null) restoreScrollOffset();
           return ListView(
+            controller: scrollController,
             padding: Adaptive.horizontal(context, maxWidth: Adaptive.readingMaxWidth)
                 .copyWith(top: MediaQuery.paddingOf(context).top + 16, bottom: MediaQuery.paddingOf(context).bottom + 32),
             children: [

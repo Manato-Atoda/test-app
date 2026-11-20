@@ -30,6 +30,11 @@ abstract final class Adaptive {
     return MediaQuery.sizeOf(context).width - padding.left - padding.right;
   }
 
+  /// 左に一覧・右に記事の 2 画面にするか（開いた iPhone Duo など、幅も高さもある画面）。
+  /// 横向きの iPhone は高さが足りないので 1 画面のまま。
+  static bool useTwoPane(BuildContext context) =>
+      usableWidth(context) >= medium && MediaQuery.sizeOf(context).height >= 500;
+
   /// カードを並べる列数
   static int columns(BuildContext context) {
     final width = usableWidth(context);

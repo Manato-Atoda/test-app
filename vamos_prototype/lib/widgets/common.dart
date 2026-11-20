@@ -162,11 +162,20 @@ class CategoryChip extends StatelessWidget {
 
 /// 白地・角丸・細い枠線のカード。
 class VamosCard extends StatelessWidget {
-  const VamosCard({super.key, required this.child, this.onTap, this.padding = EdgeInsets.zero});
+  const VamosCard({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.padding = EdgeInsets.zero,
+    this.selected = false,
+  });
 
   final Widget child;
   final VoidCallback? onTap;
   final EdgeInsetsGeometry padding;
+
+  /// 2 画面表示で、右側に表示中の項目
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
@@ -174,7 +183,9 @@ class VamosCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: VamosColors.surface,
         borderRadius: BorderRadius.circular(VamosRadius.large),
-        border: Border.all(color: VamosColors.borderLight),
+        border: selected
+            ? Border.all(color: VamosColors.primary, width: 2)
+            : Border.all(color: VamosColors.borderLight),
         boxShadow: VamosShadows.card,
       ),
       child: Material(

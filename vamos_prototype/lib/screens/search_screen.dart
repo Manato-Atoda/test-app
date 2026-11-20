@@ -5,6 +5,7 @@ import '../theme/vamos_theme.dart';
 import '../widgets/adaptive.dart';
 import '../widgets/common.dart';
 import '../widgets/glass.dart';
+import '../widgets/list_detail.dart';
 import 'interview_screens.dart';
 import 'topic_screens.dart';
 
@@ -82,21 +83,60 @@ class _SearchScreenState extends State<SearchScreen> {
           ? _Suggestions(suggestions: _suggestions, onSelect: _setKeyword)
           : hits.isEmpty
               ? const ErrorView(message: '見つかりませんでした。別のキーワードで試してください。')
-              : ListView.separated(
-                  padding: Adaptive.horizontal(context, maxWidth: Adaptive.readingMaxWidth)
-                      .copyWith(top: 16, bottom: MediaQuery.paddingOf(context).bottom + 16),
-                  itemCount: hits.length + 1,
-                  separatorBuilder: (_, _) => const SizedBox(height: 12),
-                  itemBuilder: (context, index) {
-                    if (index == 0) {
-                      return Text(
-                        '「$keyword」の検索結果 ${hits.length} 件',
-                        style: const TextStyle(fontSize: 13, color: VamosColors.textMuted),
-                      );
-                    }
-                    return _HitTile(hit: hits[index - 1]);
+              // 広い画面では、左に検索結果・右に記事を並べる
+              : ListDetail<SearchHit>(
+                  items: hits,
+                  idOf: _hitId,
+                  routeNameOf: (hit) => switch (hit) {
+                    InterviewHit(:final interview) => '/interviews/${interview.slug}',
+                    TopicHit(:final topic) => '/topics/${topic.id}',
+                  },
+                  listBuilder: (context, selectedId, open) => _SearchResults(
+                    keyword: keyword,
+                    hits: hits,
+                    selectedId: selectedId,
+                    onOpen: open,
+                  ),
+                  detailBuilder: (context, hit, options) => switch (hit) {
+                    InterviewHit(:final interview) =>
+                      InterviewDetailScreen(slug: interview.slug, preview: interview, paneOptions: options),
+                    TopicHit(:final topic) => TopicDetailScreen(id: topic.id, topic: topic, paneOptions: options),
                   },
                 ),
+    );
+  }
+}
+
+String _hitId(SearchHit hit) => switch (hit) {
+      InterviewHit(:final interview) => 'interview:${interview.slug}',
+      TopicHit(:final topic) => 'topic:${topic.id}',
+    };
+
+class _SearchResults extends StatelessWidget {
+  const _SearchResults({required this.keyword, required this.hits, required this.selectedId, required this.onOpen});
+
+  final String keyword;
+  final List<SearchHit> hits;
+  final String? selectedId;
+  final ValueChanged<SearchHit> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      padding: Adaptive.horizontal(context, maxWidth: Adaptive.readingMaxWidth)
+          .copyWith(top: 16, bottom: MediaQuery.paddingOf(context).bottom + 16),
+      itemCount: hits.length + 1,
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return Text(
+            '「$keyword」の検索結果 ${hits.length} 件',
+            style: const TextStyle(fontSize: 13, color: VamosColors.textMuted),
+          );
+        }
+        final hit = hits[index - 1];
+        return _HitTile(hit: hit, selected: _hitId(hit) == selectedId, onTap: () => onOpen(hit));
+      },
     );
   }
 }
@@ -134,30 +174,21 @@ class _Suggestions extends StatelessWidget {
 }
 
 class _HitTile extends StatelessWidget {
-  const _HitTile({required this.hit});
+  const _HitTile({required this.hit, required this.selected, required this.onTap});
 
   final SearchHit hit;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final (label, title, subtitle, thumbnail, onTap) = switch (hit) {
-      InterviewHit(:final interview) => (
-          'インタビュー',
-          interview.title,
-          interview.date,
-          interview.thumbnail,
-          () => openInterview(context, interview),
-        ),
-      TopicHit(:final topic) => (
-          topic.category?.label ?? 'トピック',
-          topic.title,
-          topic.date,
-          null,
-          () => openTopic(context, topic),
-        ),
+    final (label, title, subtitle, thumbnail) = switch (hit) {
+      InterviewHit(:final interview) => ('インタビュー', interview.title, interview.date, interview.thumbnail),
+      TopicHit(:final topic) => (topic.category?.label ?? 'トピック', topic.title, topic.date, null),
     };
     return VamosCard(
       onTap: onTap,
+      selected: selected,
       padding: const EdgeInsets.all(12),
       child: Row(
         children: [

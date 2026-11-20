@@ -8,6 +8,7 @@ import '../widgets/cards.dart';
 import '../widgets/common.dart';
 import '../widgets/content_blocks.dart';
 import '../widgets/glass.dart';
+import '../widgets/list_detail.dart';
 import 'search_screen.dart';
 
 void openTopic(BuildContext context, Topic topic) {
@@ -17,11 +18,15 @@ void openTopic(BuildContext context, Topic topic) {
   ));
 }
 
-/// トピック一覧（カテゴリーで絞り込み・引っ張って更新）
+/// トピック一覧（カテゴリーで絞り込み・引っ張って更新）。
+/// 開いた iPhone Duo などの広い画面では、左に一覧・右に記事を並べる。
 class TopicListScreen extends StatefulWidget {
-  const TopicListScreen({super.key, required this.feed});
+  const TopicListScreen({super.key, required this.feed, this.active = true});
 
   final Feed feed;
+
+  /// 下のタブでこの画面を表示中か
+  final bool active;
 
   @override
   State<TopicListScreen> createState() => _TopicListScreenState();
@@ -32,9 +37,46 @@ class _TopicListScreenState extends State<TopicListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final repository = VamosRepository.instance;
     final all = widget.feed.topics;
     final topics = _filter == null ? all : all.where((t) => t.category == _filter).toList();
+    return ListDetail<Topic>(
+      items: topics,
+      active: widget.active,
+      idOf: (topic) => '${topic.id}',
+      routeNameOf: (topic) => '/topics/${topic.id}',
+      listBuilder: (context, selectedId, open) => _TopicList(
+        feed: widget.feed,
+        topics: topics,
+        filter: _filter,
+        onFilter: (filter) => setState(() => _filter = filter),
+        selectedId: selectedId,
+        onOpen: open,
+      ),
+      detailBuilder: (context, topic, options) => TopicDetailScreen(id: topic.id, topic: topic, paneOptions: options),
+    );
+  }
+}
+
+class _TopicList extends StatelessWidget {
+  const _TopicList({
+    required this.feed,
+    required this.topics,
+    required this.filter,
+    required this.onFilter,
+    required this.selectedId,
+    required this.onOpen,
+  });
+
+  final Feed feed;
+  final List<Topic> topics;
+  final TopicCategory? filter;
+  final ValueChanged<TopicCategory?> onFilter;
+  final String? selectedId;
+  final ValueChanged<Topic> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final repository = VamosRepository.instance;
     final columns = Adaptive.columns(context);
     final rows = GridRow.chunk(topics, columns);
     return RefreshIndicator(
@@ -44,7 +86,7 @@ class _TopicListScreenState extends State<TopicListScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           const VamosSliverAppBar(actions: [SearchButton()]),
-          if (widget.feed.isOffline) SliverToBoxAdapter(child: OfflineBanner.forFeed(widget.feed, onRetry: repository.refresh)),
+          if (feed.isOffline) SliverToBoxAdapter(child: OfflineBanner.forFeed(feed, onRetry: repository.refresh)),
           SliverToBoxAdapter(
             child: PageIntro(
               kicker: 'Topics',
@@ -59,12 +101,12 @@ class _TopicListScreenState extends State<TopicListScreen> {
               padding: Adaptive.horizontal(context).copyWith(top: 8, bottom: 8),
               child: Row(
                 children: [
-                  _FilterPill(label: 'すべて', selected: _filter == null, onTap: () => setState(() => _filter = null)),
+                  _FilterPill(label: 'すべて', selected: filter == null, onTap: () => onFilter(null)),
                   for (final category in TopicCategory.values)
                     _FilterPill(
                       label: category.label,
-                      selected: _filter == category,
-                      onTap: () => setState(() => _filter = category),
+                      selected: filter == category,
+                      onTap: () => onFilter(category),
                     ),
                 ],
               ),
@@ -79,7 +121,8 @@ class _TopicListScreenState extends State<TopicListScreen> {
                 columns: columns,
                 spacing: 14,
                 children: [
-                  for (final topic in rows[index]) TopicCard(topic: topic, onTap: () => openTopic(context, topic)),
+                  for (final topic in rows[index])
+                    TopicCard(topic: topic, selected: '${topic.id}' == selectedId, onTap: () => onOpen(topic)),
                 ],
               ),
             ),
@@ -130,41 +173,66 @@ class _FilterPill extends StatelessWidget {
 
 /// トピックの詳細。リンクから開いた場合は id で探す。
 class TopicDetailScreen extends StatelessWidget {
-  const TopicDetailScreen({super.key, required this.id, this.topic});
+  const TopicDetailScreen({
+    super.key,
+    required this.id,
+    this.topic,
+    this.paneOptions = const PaneDetailOptions(embedded: false),
+  });
 
   final int id;
   final Topic? topic;
 
+  /// 2 画面表示の右側に置くか、ページとして開くか
+  final PaneDetailOptions paneOptions;
+
   @override
   Widget build(BuildContext context) {
     final known = topic;
+    final embedded = paneOptions.embedded;
     return Scaffold(
       backgroundColor: VamosColors.surface,
       extendBodyBehindAppBar: true,
-      appBar: GlassAppBar(title: Image.asset('assets/vamos/images/logo.png', height: 26, semanticLabel: 'VAMOS')),
+      appBar: GlassAppBar(
+        title: embedded ? null : Image.asset('assets/vamos/images/logo.png', height: 26, semanticLabel: 'VAMOS'),
+        showBack: !embedded,
+      ),
       body: known != null
-          ? _TopicBody(topic: known)
+          ? _TopicBody(topic: known, paneOptions: paneOptions)
           : FutureBuilder<Topic>(
               future: VamosRepository.instance.topic(id),
               builder: (context, snapshot) {
                 if (snapshot.hasError) return ErrorView(message: snapshot.error.toString());
                 final data = snapshot.data;
                 if (data == null) return const Center(child: CircularProgressIndicator());
-                return _TopicBody(topic: data);
+                return _TopicBody(topic: data, paneOptions: paneOptions);
               },
             ),
     );
   }
 }
 
-class _TopicBody extends StatelessWidget {
-  const _TopicBody({required this.topic});
+class _TopicBody extends StatefulWidget {
+  const _TopicBody({required this.topic, required this.paneOptions});
 
   final Topic topic;
+  final PaneDetailOptions paneOptions;
+
+  @override
+  State<_TopicBody> createState() => _TopicBodyState();
+}
+
+class _TopicBodyState extends State<_TopicBody> with PaneDetailMixin {
+  @override
+  PaneDetailOptions get paneOptions => widget.paneOptions;
 
   @override
   Widget build(BuildContext context) {
+    returnToPaneIfWide();
+    restoreScrollOffset();
+    final topic = widget.topic;
     return ListView(
+      controller: scrollController,
       padding: Adaptive.horizontal(context, maxWidth: Adaptive.readingMaxWidth)
           .copyWith(top: MediaQuery.paddingOf(context).top + 16, bottom: MediaQuery.paddingOf(context).bottom + 32),
       children: [

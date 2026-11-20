@@ -380,17 +380,20 @@ class _GlassTabButton extends StatelessWidget {
 /// 詳細画面用の上部バー（Scaffold の extendBodyBehindAppBar と組み合わせる）。
 /// 戻る・共有などのボタンはガラス、背景はスクロールエッジ効果。
 class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const GlassAppBar({super.key, required this.title, this.actions = const []});
+  const GlassAppBar({super.key, this.title, this.actions = const [], this.showBack = true});
 
-  final Widget title;
+  final Widget? title;
   final List<Widget> actions;
+
+  /// 戻るボタンを出す（2 画面表示の右側に置くときは false）
+  final bool showBack;
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 
   @override
   Widget build(BuildContext context) {
-    final canPop = Navigator.of(context).canPop();
+    final canPop = showBack && Navigator.of(context).canPop();
     return AppBar(
       title: title,
       actions: actions,

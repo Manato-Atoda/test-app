@@ -110,8 +110,8 @@ class _VamosShellState extends State<VamosShell> {
         index: _tab,
         children: [
           HomeScreen(content: feed, onOpenTab: (tab) => setState(() => _tab = tab)),
-          InterviewListScreen(feed: feed),
-          TopicListScreen(feed: feed),
+          InterviewListScreen(feed: feed, active: _tab == 1),
+          TopicListScreen(feed: feed, active: _tab == 2),
           MyPageScreen(feed: feed),
         ],
       ),

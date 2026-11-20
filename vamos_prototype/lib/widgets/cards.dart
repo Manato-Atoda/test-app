@@ -6,15 +6,17 @@ import 'common.dart';
 
 /// インタビューのカード（画像・ラベル・タイトル・抜粋・著者）。
 class InterviewCard extends StatelessWidget {
-  const InterviewCard({super.key, required this.interview, required this.onTap});
+  const InterviewCard({super.key, required this.interview, required this.onTap, this.selected = false});
 
   final Interview interview;
   final VoidCallback onTap;
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
     return VamosCard(
       onTap: onTap,
+      selected: selected,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -54,15 +56,17 @@ class InterviewCard extends StatelessWidget {
 
 /// トピックのカード（カテゴリー・タイトル・抜粋・日付）。
 class TopicCard extends StatelessWidget {
-  const TopicCard({super.key, required this.topic, required this.onTap});
+  const TopicCard({super.key, required this.topic, required this.onTap, this.selected = false});
 
   final Topic topic;
   final VoidCallback onTap;
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
     return VamosCard(
       onTap: onTap,
+      selected: selected,
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
