@@ -1,9 +1,12 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../config.dart';
 import '../data/repository.dart';
 import '../services/external_actions.dart';
 import '../theme/vamos_theme.dart';
+import '../widgets/adaptive.dart';
 import '../widgets/cards.dart';
 import '../widgets/common.dart';
 import 'interview_screens.dart';
@@ -23,6 +26,7 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final interviews = content.interviews;
     final repository = VamosRepository.instance;
+    final columns = Adaptive.columns(context);
     return RefreshIndicator(
       onRefresh: repository.refresh,
       edgeOffset: 60,
@@ -38,10 +42,15 @@ class HomeScreen extends StatelessWidget {
             description: 'Vamos 運営チームの学生メンバーが、参加企業を直接取材。\n求人票だけでは見えない「働くリアル」を、学生目線でお届けします。',
             child: Column(
               children: [
-                for (final interview in interviews.take(3)) ...[
-                  InterviewCard(interview: interview, onTap: () => openInterview(context, interview)),
-                  const SizedBox(height: 18),
-                ],
+                // 2 列のときは 2 行ぶん（4 件）、それ以外は 1〜3 列で 3 件
+                GridColumn(
+                  columns: columns,
+                  children: [
+                    for (final interview in interviews.take(columns == 2 ? 4 : 3))
+                      InterviewCard(interview: interview, onTap: () => openInterview(context, interview)),
+                  ],
+                ),
+                const SizedBox(height: 18),
                 OutlinePillButton(label: 'すべて見る  →', onPressed: () => onOpenTab(1)),
               ],
             ),
@@ -53,8 +62,15 @@ class HomeScreen extends StatelessWidget {
             description: '就活・転職にすぐ役立つ情報と、いま知っておきたいニュース。',
             child: Column(
               children: [
-                for (final topic in content.topics.take(5))
-                  TopicRow(topic: topic, onTap: () => openTopic(context, topic)),
+                GridColumn(
+                  columns: columns == 1 ? 1 : 2,
+                  spacing: 24,
+                  runSpacing: 0,
+                  children: [
+                    for (final topic in content.topics.take(columns == 1 ? 5 : 6))
+                      TopicRow(topic: topic, onTap: () => openTopic(context, topic)),
+                  ],
+                ),
                 const SizedBox(height: 20),
                 OutlinePillButton(label: 'トピックをもっと見る', onPressed: () => onOpenTab(2)),
               ],
@@ -80,7 +96,7 @@ class _Section extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 36, 20, 8),
+      padding: Adaptive.horizontal(context).copyWith(top: 36, bottom: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -106,7 +122,10 @@ class _HeroCarousel extends StatefulWidget {
 }
 
 class _HeroCarouselState extends State<_HeroCarousel> {
-  final _controller = PageController(viewportFraction: 0.88);
+  /// カードの幅の上限（開いた iPhone Duo などの広い画面で、写真が画面いっぱいにならないように）
+  static const _maxCardWidth = 560.0;
+
+  PageController _controller = PageController(viewportFraction: 0.88);
   int _page = 0;
 
   @override
@@ -115,56 +134,74 @@ class _HeroCarouselState extends State<_HeroCarousel> {
     super.dispose();
   }
 
+  /// 画面の幅が変わったら（折りたたみの開閉・回転）、表示中のスライドを保ったまま幅の割合を変える
+  void _matchViewportFraction(double fraction) {
+    if ((_controller.viewportFraction - fraction).abs() < 0.001) return;
+    final previous = _controller;
+    _controller = PageController(viewportFraction: fraction, initialPage: _page);
+    WidgetsBinding.instance.addPostFrameCallback((_) => previous.dispose());
+  }
+
   @override
   Widget build(BuildContext context) {
     final items = widget.content.interviews.take(4).toList();
+    final safeArea = MediaQuery.paddingOf(context);
     return Padding(
-      padding: const EdgeInsets.only(top: 20),
-      child: Column(
-        children: [
-          AspectRatio(
-            aspectRatio: 16 / 9.6,
-            child: PageView.builder(
-              controller: _controller,
-              itemCount: items.length,
-              onPageChanged: (page) => setState(() => _page = page),
-              itemBuilder: (context, index) => Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                child: GestureDetector(
-                  onTap: () => openInterview(context, items[index]),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(VamosRadius.large),
-                      boxShadow: VamosShadows.card,
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(VamosRadius.large),
-                      child: AssetPhoto(items[index].thumbnail),
+      padding: EdgeInsets.only(top: 20, left: safeArea.left, right: safeArea.right),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          // 横向きの iPhone など背の低い画面では、写真が画面の半分を超えないようにする
+          final maxCardHeight = MediaQuery.sizeOf(context).height * 0.5;
+          final cardWidth = [width * 0.88, _maxCardWidth, maxCardHeight * 16 / 9.6 + 12].reduce(math.min);
+          _matchViewportFraction(cardWidth / width);
+          return Column(
+            children: [
+              SizedBox(
+                height: (cardWidth - 12) * 9.6 / 16,
+                child: PageView.builder(
+                  controller: _controller,
+                  itemCount: items.length,
+                  onPageChanged: (page) => setState(() => _page = page),
+                  itemBuilder: (context, index) => Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: GestureDetector(
+                      onTap: () => openInterview(context, items[index]),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(VamosRadius.large),
+                          boxShadow: VamosShadows.card,
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(VamosRadius.large),
+                          child: AssetPhoto(items[index].thumbnail),
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              for (var i = 0; i < items.length; i++)
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  width: i == _page ? 24 : 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    gradient: i == _page ? VamosColors.gradient : null,
-                    color: i == _page ? null : VamosColors.border,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
+              const SizedBox(height: 14),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  for (var i = 0; i < items.length; i++)
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      width: i == _page ? 24 : 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        gradient: i == _page ? VamosColors.gradient : null,
+                        color: i == _page ? null : VamosColors.border,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                ],
+              ),
             ],
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -178,7 +215,7 @@ class _CtaBand extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(top: 40),
-      padding: const EdgeInsets.fromLTRB(24, 44, 24, 44),
+      padding: Adaptive.horizontal(context, maxWidth: 560, gutter: 24).copyWith(top: 44, bottom: 44),
       color: VamosColors.ctaBand,
       child: Column(
         children: [
@@ -208,7 +245,7 @@ class _Footer extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(24, 32, 24, 40),
+      padding: Adaptive.horizontal(context, gutter: 24).copyWith(top: 32, bottom: 40),
       decoration: const BoxDecoration(
         color: VamosColors.surfaceMuted,
         border: Border(top: BorderSide(color: VamosColors.primary, width: 2)),
@@ -242,7 +279,7 @@ void showAboutVamos(BuildContext context) {
     showDragHandle: true,
     backgroundColor: VamosColors.surface,
     builder: (context) => Padding(
-      padding: const EdgeInsets.fromLTRB(24, 0, 24, 40),
+      padding: Adaptive.horizontal(context, gutter: 24).copyWith(bottom: 40),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,

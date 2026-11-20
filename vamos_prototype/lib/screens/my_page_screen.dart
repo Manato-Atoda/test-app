@@ -6,6 +6,7 @@ import '../data/models.dart';
 import '../data/repository.dart';
 import '../services/push_service.dart';
 import '../theme/vamos_theme.dart';
+import '../widgets/adaptive.dart';
 import '../widgets/common.dart';
 import 'auth_screens.dart';
 import 'interview_screens.dart';
@@ -23,7 +24,7 @@ class MyPageScreen extends StatelessWidget {
       slivers: [
         const VamosSliverAppBar(),
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
+          padding: Adaptive.horizontal(context, maxWidth: 640).copyWith(top: 24, bottom: 40),
           sliver: SliverList.list(
             children: [
               ValueListenableBuilder<Session?>(

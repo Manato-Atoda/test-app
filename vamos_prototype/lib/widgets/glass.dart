@@ -8,6 +8,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/vamos_theme.dart';
+import 'adaptive.dart';
 
 /// iOS のリキッドグラスを使えるか（iOS 26 以降で「透明度を下げる」がオフ）。
 ///
@@ -114,18 +115,24 @@ class GlassTabBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 左右のセーフエリア（iPhone Duo の縦のステータスバーなど）には重ねない
+    final safeArea = MediaQuery.paddingOf(context);
     return ValueListenableBuilder<bool>(
       valueListenable: GlassSupport.available,
       builder: (context, available, _) => available
-          ? _NativeTabBar(items: items, selectedIndex: selectedIndex, onSelected: onSelected)
+          ? Padding(
+              padding: EdgeInsets.only(left: safeArea.left, right: safeArea.right),
+              child: _NativeTabBar(items: items, selectedIndex: selectedIndex, onSelected: onSelected),
+            )
           : _buildFlutterTabBar(context),
     );
   }
 
   Widget _buildFlutterTabBar(BuildContext context) {
     final bottom = MediaQuery.paddingOf(context).bottom;
+    // 広い画面ではカプセルが横に間延びしないよう、幅を抑えて中央に置く
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, 0, 16, bottom > 0 ? bottom - 6 : 12),
+      padding: Adaptive.horizontal(context, maxWidth: 480, gutter: 16).copyWith(bottom: bottom > 0 ? bottom - 6 : 12),
       child: SizedBox(
         height: height,
         child: GlassSurface(
@@ -403,7 +410,8 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
       surfaceTintColor: Colors.transparent,
       scrolledUnderElevation: 0,
       elevation: 0,
-      flexibleSpace: const ScrollEdgeBackground(),
+      // AppBar は flexibleSpace に高さを指定しないので、広げないと背景が高さ 0 になり描かれない
+      flexibleSpace: const SizedBox.expand(child: ScrollEdgeBackground()),
     );
   }
 }

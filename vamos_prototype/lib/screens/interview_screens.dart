@@ -4,6 +4,7 @@ import '../data/models.dart';
 import '../data/repository.dart';
 import '../services/external_actions.dart';
 import '../theme/vamos_theme.dart';
+import '../widgets/adaptive.dart';
 import '../widgets/cards.dart';
 import '../widgets/common.dart';
 import '../widgets/content_blocks.dart';
@@ -27,6 +28,8 @@ class InterviewListScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final interviews = feed.interviews;
     final repository = VamosRepository.instance;
+    final columns = Adaptive.columns(context);
+    final rows = GridRow.chunk(interviews, columns);
     return RefreshIndicator(
       onRefresh: repository.refresh,
       edgeOffset: 60,
@@ -44,13 +47,16 @@ class InterviewListScreen extends StatelessWidget {
             ),
           ),
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+            padding: Adaptive.horizontal(context).copyWith(top: 12, bottom: 32),
             sliver: SliverList.separated(
-              itemCount: interviews.length,
+              itemCount: rows.length,
               separatorBuilder: (_, _) => const SizedBox(height: 18),
-              itemBuilder: (context, index) => InterviewCard(
-                interview: interviews[index],
-                onTap: () => openInterview(context, interviews[index]),
+              itemBuilder: (context, index) => GridRow(
+                columns: columns,
+                children: [
+                  for (final interview in rows[index])
+                    InterviewCard(interview: interview, onTap: () => openInterview(context, interview)),
+                ],
               ),
             ),
           ),
@@ -118,7 +124,8 @@ class _InterviewDetailScreenState extends State<InterviewDetailScreen> {
           }
           if (interview == null) return const Center(child: CircularProgressIndicator());
           return ListView(
-            padding: EdgeInsets.fromLTRB(20, MediaQuery.paddingOf(context).top + 16, 20, 48),
+            padding: Adaptive.horizontal(context, maxWidth: Adaptive.readingMaxWidth)
+                .copyWith(top: MediaQuery.paddingOf(context).top + 16, bottom: MediaQuery.paddingOf(context).bottom + 32),
             children: [
               const Align(alignment: Alignment.centerLeft, child: CategoryChip('インタビュー', style: ChipStyle.filled)),
               const SizedBox(height: 14),

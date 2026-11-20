@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/models.dart';
 import '../data/repository.dart';
 import '../theme/vamos_theme.dart';
+import '../widgets/adaptive.dart';
 import '../widgets/cards.dart';
 import '../widgets/common.dart';
 import '../widgets/content_blocks.dart';
@@ -34,6 +35,8 @@ class _TopicListScreenState extends State<TopicListScreen> {
     final repository = VamosRepository.instance;
     final all = widget.feed.topics;
     final topics = _filter == null ? all : all.where((t) => t.category == _filter).toList();
+    final columns = Adaptive.columns(context);
+    final rows = GridRow.chunk(topics, columns);
     return RefreshIndicator(
       onRefresh: repository.refresh,
       edgeOffset: 60,
@@ -53,7 +56,7 @@ class _TopicListScreenState extends State<TopicListScreen> {
           SliverToBoxAdapter(
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+              padding: Adaptive.horizontal(context).copyWith(top: 8, bottom: 8),
               child: Row(
                 children: [
                   _FilterPill(label: 'すべて', selected: _filter == null, onTap: () => setState(() => _filter = null)),
@@ -68,12 +71,17 @@ class _TopicListScreenState extends State<TopicListScreen> {
             ),
           ),
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
+            padding: Adaptive.horizontal(context).copyWith(top: 12, bottom: 32),
             sliver: SliverList.separated(
-              itemCount: topics.length,
+              itemCount: rows.length,
               separatorBuilder: (_, _) => const SizedBox(height: 14),
-              itemBuilder: (context, index) =>
-                  TopicCard(topic: topics[index], onTap: () => openTopic(context, topics[index])),
+              itemBuilder: (context, index) => GridRow(
+                columns: columns,
+                spacing: 14,
+                children: [
+                  for (final topic in rows[index]) TopicCard(topic: topic, onTap: () => openTopic(context, topic)),
+                ],
+              ),
             ),
           ),
           const BottomBarSpacer(),
@@ -157,7 +165,8 @@ class _TopicBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: EdgeInsets.fromLTRB(20, MediaQuery.paddingOf(context).top + 16, 20, 48),
+      padding: Adaptive.horizontal(context, maxWidth: Adaptive.readingMaxWidth)
+          .copyWith(top: MediaQuery.paddingOf(context).top + 16, bottom: MediaQuery.paddingOf(context).bottom + 32),
       children: [
         if (topic.category != null)
           Align(

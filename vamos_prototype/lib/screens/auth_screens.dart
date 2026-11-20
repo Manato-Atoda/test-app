@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../data/api_client.dart';
 import '../data/repository.dart';
 import '../theme/vamos_theme.dart';
+import '../widgets/adaptive.dart';
 import '../widgets/common.dart';
 
 /// 会員登録・ログインの入口（RE_VAMOS と同じく、メールに届く確認コードで認証する）
@@ -263,7 +264,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+        padding: Adaptive.horizontal(context, maxWidth: Adaptive.formMaxWidth).copyWith(top: 20, bottom: 40),
         children: [
           VamosCard(
             padding: const EdgeInsets.all(20),
@@ -466,7 +467,7 @@ class _AuthScaffold extends StatelessWidget {
       backgroundColor: VamosColors.background,
       appBar: AppBar(title: Image.asset('assets/vamos/images/logo.png', height: 26, semanticLabel: 'VAMOS')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
+        padding: Adaptive.horizontal(context, maxWidth: Adaptive.formMaxWidth).copyWith(top: 24, bottom: 40),
         children: [
           VamosCard(
             padding: const EdgeInsets.all(22),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/repository.dart';
 import '../theme/vamos_theme.dart';
+import '../widgets/adaptive.dart';
 import '../widgets/common.dart';
 import '../widgets/glass.dart';
 import 'interview_screens.dart';
@@ -82,7 +83,8 @@ class _SearchScreenState extends State<SearchScreen> {
           : hits.isEmpty
               ? const ErrorView(message: '見つかりませんでした。別のキーワードで試してください。')
               : ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+                  padding: Adaptive.horizontal(context, maxWidth: Adaptive.readingMaxWidth)
+                      .copyWith(top: 16, bottom: MediaQuery.paddingOf(context).bottom + 16),
                   itemCount: hits.length + 1,
                   separatorBuilder: (_, _) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
@@ -108,7 +110,7 @@ class _Suggestions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: Adaptive.horizontal(context, maxWidth: Adaptive.readingMaxWidth).copyWith(top: 20, bottom: 20),
       children: [
         const SectionKicker('Keywords'),
         const SizedBox(height: 12),

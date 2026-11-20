@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/repository.dart';
 import '../theme/vamos_theme.dart';
+import 'adaptive.dart';
 import 'glass.dart';
 
 /// 画面上部のヘッダー（ロゴ＋水色グラデーションの細線）。
@@ -96,7 +97,7 @@ class PageIntro extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 28, 20, 8),
+      padding: Adaptive.horizontal(context).copyWith(top: 28, bottom: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -366,7 +367,7 @@ class OfflineBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+      margin: Adaptive.horizontal(context).copyWith(top: 16),
       padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
       decoration: BoxDecoration(
         color: const Color(0xFFFFF7ED),
