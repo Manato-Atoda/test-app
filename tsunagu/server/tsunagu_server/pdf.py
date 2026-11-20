@@ -33,7 +33,7 @@ class AccountNotice:
 
 
 def _jp_hex(text: str) -> str:
-    """UniJIS-UCS2-H 用の UTF-16BE（BMP 外の文字は「〓」に置換）。"""
+    """UniJIS-UCS2-HW-H 用の UTF-16BE（BMP 外の文字は「〓」に置換）。"""
     out = []
     for ch in text:
         code = ord(ch)
@@ -218,7 +218,9 @@ def build_account_notices_pdf(notices: List[AccountNotice], title: str = "アカ
         ("<< /Type /Font /Subtype /CIDFontType0 /BaseFont /HeiseiKakuGo-W5 "
          "/CIDSystemInfo << /Registry (Adobe) /Ordering (Japan1) /Supplement 2 >> "
          "/FontDescriptor %d 0 R /DW 1000 /W [1 95 500 231 389 500 631 631 500] >>" % descriptor_id).encode())
-    font_jp = add(("<< /Type /Font /Subtype /Type0 /BaseFont /HeiseiKakuGo-W5 /Encoding /UniJIS-UCS2-H "
+    # 英数字は半角の字形（幅 0.5）に割り当てる HW 版を使う。UniJIS-UCS2-H だと英数字がプロポーショナルの字形になり、
+    # Mac のプレビューでは字形の幅と送り幅が合わず、文中の英数字（SNS・iPhone・日付など）が重なって表示された。
+    font_jp = add(("<< /Type /Font /Subtype /Type0 /BaseFont /HeiseiKakuGo-W5 /Encoding /UniJIS-UCS2-HW-H "
                    "/DescendantFonts [%d 0 R] >>" % cid_font_id).encode())
     font_mono_b = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Courier-Bold /Encoding /WinAnsiEncoding >>")
     font_mono = add(b"<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>")
