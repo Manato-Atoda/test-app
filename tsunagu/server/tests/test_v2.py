@@ -12,7 +12,8 @@ from unittest import mock
 from tests.test_server import ServerTest  # 共通の準備（デモ企業・call・activate）
 
 from tsunagu_server.db import connect, migrate  # noqa: E402
-from tsunagu_server.operator_tools import create_company  # noqa: E402
+from tsunagu_server.operator_tools import create_company, reissue_credentials  # noqa: E402
+from tsunagu_server.web import ApiError  # noqa: E402
 
 
 def tiny_png(width: int = 3, height: int = 2) -> bytes:
@@ -281,6 +282,34 @@ class V2Test(ServerTest):
                                     (post_id, user_id)).fetchone()[0], 1)
         self.assertEqual(db.execute("SELECT COUNT(*) FROM reactions").fetchone()[0], 0)
         db.close()
+
+
+    # ------------------------------------------------------------- 運営者による仮パスワードの再発行
+    def test_operator_reissue_credentials(self) -> None:
+        admin = self.activate("E0001", "Admin-pass-2026")
+        db = self.db()
+        try:
+            with self.assertRaises(ApiError):
+                reissue_credentials(db, self.cfg, company_code="DEMO", login_id="E9999")
+            with self.assertRaises(ApiError):
+                reissue_credentials(db, self.cfg, company_code="NOPE", login_id="E0001")
+            notice = reissue_credentials(db, self.cfg, company_code="demo", login_id="misaki.sato@demo.example")
+            db.commit()
+        finally:
+            db.close()
+        self.assertEqual((notice.company_code, notice.employee_code), ("DEMO", "E0001"))
+        # 今のパスワードとログイン中の端末は使えなくなる
+        self.assertEqual(self.call("GET", "/api/me", token=admin)[0], 401)
+        self.assertEqual(self.login("E0001", "Admin-pass-2026")[0], 401)
+        # 新しい仮パスワードでログインすると、まずパスワードの再設定になる
+        status, data = self.login("E0001", notice.temporary_password)
+        self.assertEqual((status, data["status"]), (200, "password_change_required"))
+        db = self.db()
+        try:
+            actions = [r["action"] for r in db.execute("SELECT action FROM audit_logs WHERE target_id = 1")]
+        finally:
+            db.close()
+        self.assertIn("admin.credentials.issued", actions)
 
 
 # ServerTest のテストを二重に実行しないよう、このモジュールでは V2Test 独自のものだけを残す

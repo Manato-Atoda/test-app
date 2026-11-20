@@ -1,4 +1,4 @@
-"""サービス運営者向けの操作（企業の作成・デモデータ）。コマンドラインから使う。"""
+"""サービス運営者向けの操作（企業の作成・仮パスワードの再発行・デモデータ）。コマンドラインから使う。"""
 from __future__ import annotations
 
 import json
@@ -6,7 +6,8 @@ import sqlite3
 from typing import Dict, List, Optional, Tuple
 
 from . import passwords
-from .accounts import COMPANY_CODE_RE, insert_user, issue_credentials, normalize_company_code, validate_user_fields
+from .accounts import (COMPANY_CODE_RE, find_user_by_login_id, insert_user, issuable, issue_credentials,
+                       normalize_company_code, validate_user_fields)
 from .config import Config
 from .db import DEFAULT_SETTINGS, audit, ensure_company_defaults, now
 from .pdf import AccountNotice
@@ -44,6 +45,23 @@ def create_company(db: sqlite3.Connection, cfg: Config, *, code: str, name: str,
     user = db.execute("SELECT * FROM users WHERE id = ?", (admin_id,)).fetchone()
     notice = issue_credentials(db, cfg, company, user, method=issue_via, actor_id=None, ip=None)
     return company_id, admin_id, notice
+
+
+def reissue_credentials(db: sqlite3.Connection, cfg: Config, *, company_code: str, login_id: str) -> AccountNotice:
+    """社員の仮パスワードを作り直す（管理者がパスワードを忘れてログインできないときの運営者用）。
+
+    今のパスワードは使えなくなり、ログイン中の端末もすべてログアウトされる。次のログインでパスワードの再設定が必要。
+    """
+    company = db.execute("SELECT * FROM companies WHERE code = ?", (normalize_company_code(company_code),)).fetchone()
+    if not company:
+        raise ApiError(404, "not_found", "企業コード %s の企業はありません" % normalize_company_code(company_code))
+    user = find_user_by_login_id(db, company["id"], login_id)
+    if not user:
+        raise ApiError(404, "not_found", "社員コードまたはメールアドレス %s の社員はいません" % login_id.strip())
+    ok, reason = issuable(user)
+    if not ok:
+        raise ApiError(409, "not_issuable", "%s さんには発行できません（%s）" % (user["display_name"], reason))
+    return issue_credentials(db, cfg, company, user, method="cli", actor_id=None, ip=None)
 
 
 # ------------------------------------------------------------------ デモデータ（開発用）
