@@ -127,7 +127,7 @@ def _draw_notice(page: _Page, n: AccountNotice) -> None:
         page.jp(left, y - 20, n.company_name, 10, MUTED)
 
     y -= 50
-    intro = "%s の社内SNS「%s」のアカウントを発行しました。下記の情報でログインし、" \
+    intro = "%sの社内SNS「%s」のアカウントを発行しました。下記の情報でログインし、" \
             "初回ログイン時に新しいパスワードを設定してください。" % (n.company_name, n.service_name)
     for row in _wrap(intro, 10.5, width):
         page.jp(left, y, row, 10.5)
@@ -169,7 +169,7 @@ def _draw_notice(page: _Page, n: AccountNotice) -> None:
         "1.  アプリ「%s」を開きます（iPhone / Android / Mac / Windows）。" % n.service_name,
         "2.  企業コード、社員コード（またはメールアドレス）、仮パスワードを入力してログインします。",
         "3.  新しいパスワードを設定します（%s）。" % rule,
-        "4.  設定画面でパスキーを登録すると、次回から指紋・顔認証でログインできます。",
+        "4.  メニューの「パスキー」で登録すると、次回から指紋・顔認証でログインできます。",
     ]
     for step in steps:
         for j, row in enumerate(_wrap(step, 10.5, width - 10)):

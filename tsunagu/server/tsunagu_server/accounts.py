@@ -267,7 +267,7 @@ def _mail_text(n: AccountNotice, password_text: str) -> str:
     email_line = n.email or "（登録なし）"
     return (
         "{name} 様\n\n"
-        "{company} の社内SNS「{service}」のアカウントを発行しました。\n"
+        "{company}の社内SNS「{service}」のアカウントを発行しました。\n"
         "下記の情報でログインしてください。\n\n"
         "■ ログイン情報\n"
         "企業コード　　：{company_code}\n"
@@ -279,7 +279,7 @@ def _mail_text(n: AccountNotice, password_text: str) -> str:
         "1. アプリ「{service}」を開く（iPhone / Android / Mac / Windows）\n"
         "2. 企業コード、社員コード（またはメールアドレス）、仮パスワードを入力してログイン\n"
         "3. 新しいパスワードを設定（{rule}）\n"
-        "4. 設定画面でパスキーを登録すると、次回から指紋・顔認証でログインできます\n\n"
+        "4. メニューの「パスキー」で登録すると、次回から指紋・顔認証でログインできます\n\n"
         "■ ご注意\n"
         "・このメールは本人以外に転送しないでください。\n"
         "・パスワードを設定したら、このメールは削除してください。\n"
