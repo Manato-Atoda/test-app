@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>パスキーでログイン｜つなぐ</title>
+  <link rel="stylesheet" href="/static/common.css">
+</head>
+<body>
+  <main class="center-page">
+    <section class="card center-card">
+      <span class="brandmark"><span class="logo">つ</span>つなぐ</span>
+      <h1>パスキーでログイン</h1>
+      <p class="muted">指紋・顔認証・画面ロックで本人確認をします。</p>
+      <div id="message" class="alert hidden" role="alert"></div>
+      <form id="form" novalidate>
+        <div class="field">
+          <label for="company">企業コード</label>
+          <input id="company" class="input mono" autocomplete="organization" autocapitalize="characters" required>
+        </div>
+        <button id="submit" class="btn primary block" type="submit">パスキーでログイン</button>
+      </form>
+      <p class="small muted" id="back-wrap"><a id="back" href="#">アプリに戻る</a></p>
+    </section>
+  </main>
+  <script src="/static/passkey/passkey.js"></script>
+  <script src="/static/passkey/login.js"></script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>パスキーの登録｜つなぐ</title>
+  <link rel="stylesheet" href="/static/common.css">
+</head>
+<body>
+  <main class="center-page">
+    <section class="card center-card">
+      <span class="brandmark"><span class="logo">つ</span>つなぐ</span>
+      <h1>パスキーを登録</h1>
+      <p class="muted">登録すると、次回から指紋・顔認証・画面ロックだけでログインできます。パスキーは端末（またはパスワード管理アプリ）に安全に保存され、サーバーには公開鍵だけが送られます。</p>
+      <div id="message" class="alert hidden" role="alert"></div>
+      <form id="form" novalidate>
+        <div class="field">
+          <label for="name">このパスキーの名前</label>
+          <input id="name" class="input" maxlength="40" placeholder="例：会社の iPhone">
+          <span class="hint">あとで一覧から見分けるための名前です。</span>
+        </div>
+        <button id="submit" class="btn primary block" type="submit">パスキーを登録</button>
+      </form>
+      <p class="small muted" id="back-wrap"><a id="back" href="#">アプリに戻る</a></p>
+    </section>
+  </main>
+  <script src="/static/passkey/passkey.js"></script>
+  <script src="/static/passkey/register.js"></script>
+</body>
+</html>
