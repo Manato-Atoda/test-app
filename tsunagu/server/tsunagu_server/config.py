@@ -14,12 +14,12 @@ class Config:
     db_path: str = os.path.join(SERVER_DIR, "var", "tsunagu.db")
     public_url: str = "http://localhost:8790"
     rp_id: str = ""
-    rp_name: str = "つなぐ"
+    rp_name: str = "M"
     allowed_origins: List[str] = field(default_factory=list)
     app_scheme: str = "tsunagu"
     # outbox: 送らずに DB に保存して管理コンソールで確認（開発用） / smtp: 実際に送信
     mail_mode: str = "outbox"
-    mail_from: str = "つなぐ <no-reply@example.com>"
+    mail_from: str = "M <no-reply@example.com>"
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""

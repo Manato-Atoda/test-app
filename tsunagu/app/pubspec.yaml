@@ -1,5 +1,5 @@
 name: tsunagu
-description: "社内SNS「つなぐ」のクライアント（iOS / Android / macOS / Windows）"
+description: "社内SNS「M」のクライアント（iOS / Android / macOS / Windows）"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -37,6 +37,7 @@ dependencies:
   flutter_web_auth_2: ^6.0.0
   crypto: ^3.0.7
   url_launcher: ^6.3.2
+  image_picker: ^1.2.4
 
 dev_dependencies:
   flutter_test:

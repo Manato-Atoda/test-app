@@ -7,9 +7,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 class SecureStore {
   SecureStore()
     : _storage = const FlutterSecureStorage(
-        iOptions: IOSOptions(
-          accessibility: KeychainAccessibility.first_unlock_this_device,
-        ),
+        iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock_this_device),
         // データ保護キーチェーンは署名チーム付きのエンタイトルメントが必要なため、
         // 開発中もそのまま動く従来のキーチェーンを使う。
         mOptions: MacOsOptions(

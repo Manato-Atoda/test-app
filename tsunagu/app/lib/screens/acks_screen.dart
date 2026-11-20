@@ -94,7 +94,10 @@ class _UserList extends StatelessWidget {
       child: users.isEmpty
           ? ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              children: [const SizedBox(height: 80), MessageView(icon: Icons.groups_outlined, message: empty)],
+              children: [
+                const SizedBox(height: 80),
+                MessageView(icon: Icons.groups_outlined, message: empty),
+              ],
             )
           : ListView.builder(
               physics: const AlwaysScrollableScrollPhysics(),

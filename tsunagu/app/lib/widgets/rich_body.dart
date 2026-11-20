@@ -64,10 +64,7 @@ class _RichBodyState extends State<RichBody> {
           spans.add(
             TextSpan(
               text: seg.text,
-              style: TextStyle(
-                color: theme.colorScheme.primary,
-                decoration: TextDecoration.underline,
-              ),
+              style: TextStyle(color: theme.colorScheme.primary, decoration: TextDecoration.underline),
               recognizer: r,
             ),
           );
@@ -75,10 +72,7 @@ class _RichBodyState extends State<RichBody> {
           spans.add(
             TextSpan(
               text: seg.text,
-              style: TextStyle(
-                color: theme.colorScheme.primary,
-                fontWeight: FontWeight.w600,
-              ),
+              style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.w600),
             ),
           );
       }

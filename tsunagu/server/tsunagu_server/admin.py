@@ -7,13 +7,15 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 import sqlite3
+from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
 from . import passwords
 from .accounts import (account_state, insert_user, issuable, issue_credentials, revoke_sessions,
                        send_credentials_mail, user_summary, users_by_ids, validate_user_fields)
-from .db import DEFAULT_SETTINGS, audit, company_settings, iso, jp_datetime, now
+from .db import DEFAULT_SETTINGS, JST, audit, company_settings, iso, jp_datetime, now
 from .pdf import build_account_notices_pdf
 from .web import ApiError, Ctx, Response, Router
 
@@ -277,7 +279,8 @@ def _admin_channel_json(ctx: Ctx, c: sqlite3.Row) -> Dict[str, Any]:
                                  (ctx.cid,)).fetchone()[0]
     else:
         members = ctx.db.execute("SELECT COUNT(*) FROM channel_members WHERE channel_id = ?", (c["id"],)).fetchone()[0]
-    return {"id": c["id"], "name": c["name"], "description": c["description"], "visibility": c["visibility"],
+    return {"id": c["id"], "name": c["name"], "emoji": c["emoji"], "description": c["description"],
+            "visibility": c["visibility"],
             "company_wide": bool(c["company_wide"]), "post_policy": c["post_policy"], "archived": bool(c["archived"]),
             "member_count": members, "created_at": iso(c["created_at"])}
 
@@ -289,6 +292,8 @@ def _channel_fields(ctx: Ctx, partial: bool) -> Dict[str, Any]:
         out["name"] = ctx.req.str_field("name", label="チャンネル名", max_len=40)
     if not partial or "description" in data:
         out["description"] = ctx.req.str_field("description", required=False, label="説明", max_len=200)
+    if not partial or "emoji" in data:
+        out["emoji"] = ctx.req.str_field("emoji", required=False, label="絵文字", max_len=8) or None
     if not partial or "visibility" in data:
         out["visibility"] = data.get("visibility") or "open"
         if out["visibility"] not in ("open", "private"):
@@ -307,7 +312,7 @@ def _channel_fields(ctx: Ctx, partial: bool) -> Dict[str, Any]:
 
 
 def _channel(ctx: Ctx) -> sqlite3.Row:
-    row = ctx.db.execute("SELECT * FROM channels WHERE id = ? AND company_id = ?",
+    row = ctx.db.execute("SELECT * FROM channels WHERE id = ? AND company_id = ? AND system_kind IS NULL",
                          (ctx.req.params["id"], ctx.cid)).fetchone()
     if row is None:
         raise ApiError(404, "not_found", "チャンネルが見つかりません")
@@ -316,8 +321,8 @@ def _channel(ctx: Ctx) -> sqlite3.Row:
 
 @router.route("GET", "/api/admin/channels", auth="admin")
 def admin_channels(ctx: Ctx) -> Response:
-    rows = ctx.db.execute("SELECT * FROM channels WHERE company_id = ? ORDER BY archived, company_wide DESC,"
-                          " sort_order, name", (ctx.cid,)).fetchall()
+    rows = ctx.db.execute("SELECT * FROM channels WHERE company_id = ? AND system_kind IS NULL"
+                          " ORDER BY archived, company_wide DESC, sort_order, name", (ctx.cid,)).fetchall()
     return Response.json({"channels": [_admin_channel_json(ctx, c) for c in rows]})
 
 
@@ -327,10 +332,10 @@ def create_channel(ctx: Ctx) -> Response:
     if ctx.db.execute("SELECT 1 FROM channels WHERE company_id = ? AND name = ?", (ctx.cid, fields["name"])).fetchone():
         raise ApiError(409, "duplicate", "同じ名前のチャンネルがあります", field="name")
     cur = ctx.db.execute(
-        "INSERT INTO channels (company_id, name, description, visibility, company_wide, post_policy, created_by,"
-        " created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (ctx.cid, fields["name"], fields["description"], fields["visibility"], fields["company_wide"],
-         fields["post_policy"], ctx.uid, now()))
+        "INSERT INTO channels (company_id, name, emoji, description, visibility, company_wide, post_policy,"
+        " created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (ctx.cid, fields["name"], fields["emoji"], fields["description"], fields["visibility"],
+         fields["company_wide"], fields["post_policy"], ctx.uid, now()))
     if not fields["company_wide"]:
         ctx.db.execute("INSERT OR IGNORE INTO channel_members (channel_id, user_id, joined_at) VALUES (?, ?, ?)",
                        (cur.lastrowid, ctx.uid, now()))
@@ -415,6 +420,8 @@ def list_reports(ctx: Ctx) -> Response:
             "id": r["id"], "target_type": r["target_type"], "target_id": r["target_id"], "reason": r["reason"],
             "status": r["status"], "resolution": r["resolution"], "created_at": iso(r["created_at"]),
             "reporter": user_summary(reporter), "author": user_summary(author) if author else None,
+            "author_identity": (target["identity"] if target else "real"),
+            "author_display_name": (target["display_name"] if target else None),
             "body": target["body"] if target else "",
             "target_removed": bool(target is None or target["deleted_at"] or target["hidden_at"]),
         })
@@ -462,6 +469,9 @@ AUDIT_LABELS = {
     "admin.report.resolved": "通報対応", "admin.settings.updated": "設定変更",
     "admin.audit.exported": "監査ログ出力", "post.deleted": "投稿削除", "comment.deleted": "コメント削除",
     "report.created": "通報", "company.created": "企業作成",
+    "question.deleted": "質問削除", "answer.deleted": "回答削除",
+    "admin.forest_category.created": "森のカテゴリ作成", "admin.forest_category.updated": "森のカテゴリ変更",
+    "admin.insights.generated": "AI レポート作成",
 }
 
 
@@ -529,6 +539,12 @@ def patch_settings(ctx: Ctx) -> Response:
             if current[key] != value:
                 current[key] = value
                 changed.append(key)
+    for flag in ("identity_department_enabled", "identity_anonymous_enabled", "watermark_mobile"):
+        if flag in data:
+            value = bool(data[flag])
+            if current[flag] != value:
+                current[flag] = value
+                changed.append(flag)
     if "password_require_symbol" in data:
         value = bool(data["password_require_symbol"])
         if current["password_require_symbol"] != value:
@@ -561,3 +577,256 @@ def mail_log(ctx: Ctx) -> Response:
     return Response.json({"mail_mode": ctx.cfg.mail_mode, "messages": [{
         "id": r["id"], "to": r["to_addr"], "subject": r["subject"], "body": r["body"], "status": r["status"],
         "error": r["error"], "created_at": iso(r["created_at"])} for r in rows]})
+
+
+# ------------------------------------------------------------------ わからんの森のカテゴリ
+
+def _category_fields(ctx: Ctx, partial: bool) -> Dict[str, Any]:
+    data = ctx.req.json()
+    out: Dict[str, Any] = {}
+    if not partial or "name" in data:
+        out["name"] = ctx.req.str_field("name", label="カテゴリ名", max_len=30)
+    if not partial or "emoji" in data:
+        out["emoji"] = ctx.req.str_field("emoji", required=False, label="絵文字", max_len=8)
+    if not partial or "description" in data:
+        out["description"] = ctx.req.str_field("description", required=False, label="説明", max_len=200)
+    if "position" in data:
+        position = data.get("position")
+        if not isinstance(position, int) or isinstance(position, bool) or not 0 <= position <= 999:
+            raise ApiError(400, "invalid_field", "並び順は 0〜999 で指定してください", field="position")
+        out["position"] = position
+    return out
+
+
+@router.route("GET", "/api/admin/forest-categories", auth="admin")
+def forest_categories(ctx: Ctx) -> Response:
+    from .forest import category_admin_json
+    rows = ctx.db.execute("SELECT * FROM forest_categories WHERE company_id = ? ORDER BY position, id",
+                          (ctx.cid,)).fetchall()
+    return Response.json({"categories": [category_admin_json(ctx, r) for r in rows]})
+
+
+@router.route("POST", "/api/admin/forest-categories", auth="admin")
+def create_forest_category(ctx: Ctx) -> Response:
+    from .forest import category_admin_json
+    fields = _category_fields(ctx, partial=False)
+    cur = ctx.db.execute("INSERT INTO forest_categories (company_id, name, emoji, description, position, created_at)"
+                         " VALUES (?, ?, ?, ?, ?, ?)", (ctx.cid, fields["name"], fields["emoji"],
+                                                         fields["description"], fields.get("position", 100), now()))
+    audit(ctx.db, company_id=ctx.cid, actor_id=ctx.uid, action="admin.forest_category.created",
+          target_type="forest_category", target_id=cur.lastrowid, detail=fields, ip=ctx.req.ip)
+    row = ctx.db.execute("SELECT * FROM forest_categories WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return Response.json({"category": category_admin_json(ctx, row)})
+
+
+@router.route("PATCH", "/api/admin/forest-categories/{id:int}", auth="admin")
+def update_forest_category(ctx: Ctx) -> Response:
+    from .forest import category_admin_json
+    row = ctx.db.execute("SELECT * FROM forest_categories WHERE id = ? AND company_id = ?",
+                         (ctx.req.params["id"], ctx.cid)).fetchone()
+    if row is None:
+        raise ApiError(404, "not_found", "カテゴリが見つかりません")
+    fields = _category_fields(ctx, partial=True)
+    if fields:
+        sets = ", ".join("%s = ?" % k for k in fields)
+        ctx.db.execute("UPDATE forest_categories SET %s WHERE id = ?" % sets, list(fields.values()) + [row["id"]])
+        audit(ctx.db, company_id=ctx.cid, actor_id=ctx.uid, action="admin.forest_category.updated",
+              target_type="forest_category", target_id=row["id"], detail=fields, ip=ctx.req.ip)
+    row = ctx.db.execute("SELECT * FROM forest_categories WHERE id = ?", (row["id"],)).fetchone()
+    return Response.json({"category": category_admin_json(ctx, row)})
+
+
+# ------------------------------------------------------------------ AI インサイト（利用状況の集計と定性レポート）
+
+MENTION_OR_EMAIL = re.compile(r"@[A-Za-z0-9._\-]+|[^\s@]+@[^\s@]+")
+
+
+def _insight_stats(ctx: Ctx) -> Dict[str, Any]:
+    db, cid = ctx.db, ctx.cid
+    today = datetime.now(JST).replace(hour=0, minute=0, second=0, microsecond=0)
+    start = today - timedelta(days=29)
+    since = int(start.timestamp())
+
+    def day(ts: int) -> str:
+        return datetime.fromtimestamp(ts, JST).strftime("%Y-%m-%d")
+
+    days = {(start + timedelta(days=i)).strftime("%Y-%m-%d"): {"posts": 0, "comments": 0, "users": set()}
+            for i in range(30)}
+    commit_channel = db.execute("SELECT id FROM channels WHERE company_id = ? AND system_kind = 'commit'",
+                                (cid,)).fetchone()[0]
+    posts = db.execute("SELECT p.*, c.name AS channel_name, c.system_kind FROM posts p JOIN channels c"
+                       " ON c.id = p.channel_id WHERE p.company_id = ? AND p.created_at >= ? AND p.deleted_at IS NULL"
+                       " AND p.kind != 'share'", (cid, since)).fetchall()
+    comments = db.execute("SELECT * FROM comments WHERE company_id = ? AND created_at >= ? AND deleted_at IS NULL",
+                          (cid, since)).fetchall()
+    logins = db.execute("SELECT actor_id, created_at FROM audit_logs WHERE company_id = ? AND action ="
+                        " 'auth.login.success' AND created_at >= ?", (cid, since)).fetchall()
+    for p in posts:
+        d = days.get(day(p["created_at"]))
+        if d:
+            d["posts"] += 1
+            d["users"].add(p["author_id"])
+    for cm in comments:
+        d = days.get(day(cm["created_at"]))
+        if d:
+            d["comments"] += 1
+            d["users"].add(cm["author_id"])
+    for lg in logins:
+        d = days.get(day(lg["created_at"]))
+        if d and lg["actor_id"]:
+            d["users"].add(lg["actor_id"])
+    daily = [{"date": k, "posts": v["posts"], "comments": v["comments"], "active_users": len(v["users"])}
+             for k, v in days.items()]
+
+    members = db.execute("SELECT * FROM users WHERE company_id = ? AND status = 'active'", (cid,)).fetchall()
+    ts_now = now()
+    likes_by_post = {r[0]: r[1] for r in db.execute(
+        "SELECT l.post_id, COUNT(*) FROM likes l JOIN posts p ON p.id = l.post_id WHERE p.company_id = ?"
+        " AND p.created_at >= ? GROUP BY l.post_id", (cid, since))}
+    comments_by_post: Dict[int, int] = {}
+    for cm in comments:
+        comments_by_post[cm["post_id"]] = comments_by_post.get(cm["post_id"], 0) + 1
+    by_user_dept = {u["id"]: (u["department"] or "（部署なし）") for u in members}
+    # アクティブ = 期間中にログイン・投稿・コメントのどれかをした人（全体の数字と同じ定義）
+    active_ids = {uid for d in days.values() for uid in d["users"]}
+    departments: Dict[str, Dict[str, Any]] = {}
+    for u in members:
+        dept = departments.setdefault(by_user_dept[u["id"]], {"members": 0, "active_30d": 0, "posts": 0, "comments": 0,
+                                                               "likes_received": 0})
+        dept["members"] += 1
+        if u["id"] in active_ids:
+            dept["active_30d"] += 1
+    for p in posts:
+        dept = departments.get(by_user_dept.get(p["author_id"], ""))
+        if dept is not None:
+            dept["posts"] += 1
+            dept["likes_received"] += likes_by_post.get(p["id"], 0)
+    for cm in comments:
+        dept = departments.get(by_user_dept.get(cm["author_id"], ""))
+        if dept is not None:
+            dept["comments"] += 1
+    channels: Dict[str, Dict[str, int]] = {}
+    for p in posts:
+        name = "COMMIT" if p["system_kind"] == "commit" else p["channel_name"]
+        ch = channels.setdefault(name, {"posts": 0, "comments": 0, "likes": 0})
+        ch["posts"] += 1
+        ch["comments"] += comments_by_post.get(p["id"], 0)
+        ch["likes"] += likes_by_post.get(p["id"], 0)
+
+    silent = sorted(
+        [{"id": u["id"], "display_name": u["display_name"], "department": u["department"],
+          "days_since_login": None if not u["last_login_at"] else (ts_now - u["last_login_at"]) // 86400}
+         for u in members if not u["last_login_at"] or u["last_login_at"] < ts_now - 14 * 86400],
+        key=lambda x: (x["days_since_login"] is not None, -(x["days_since_login"] or 0)))
+
+    ranked = sorted(posts, key=lambda p: -(likes_by_post.get(p["id"], 0) + 2 * comments_by_post.get(p["id"], 0)))
+    top_posts = []
+    for p in ranked[:5]:
+        score = likes_by_post.get(p["id"], 0) + comments_by_post.get(p["id"], 0)
+        if score == 0:
+            break
+        top_posts.append({"id": p["id"], "excerpt": p["body"].replace("\n", " ")[:120],
+                          "channel": "COMMIT" if p["system_kind"] == "commit" else p["channel_name"],
+                          "likes": likes_by_post.get(p["id"], 0), "comments": comments_by_post.get(p["id"], 0)})
+
+    questions = db.execute("SELECT q.*, (SELECT MIN(a.created_at) FROM answers a WHERE a.question_id = q.id AND"
+                           " a.deleted_at IS NULL) AS first_answer FROM questions q WHERE q.company_id = ? AND"
+                           " q.deleted_at IS NULL", (cid,)).fetchall()
+    recent_q = [q for q in questions if q["created_at"] >= since]
+    waits = sorted((q["first_answer"] - q["created_at"]) / 3600 for q in recent_q if q["first_answer"])
+    forest = {
+        "questions_30d": len(recent_q),
+        "answered_30d": len([q for q in recent_q if q["first_answer"]]),
+        "unanswered_open": len([q for q in questions if not q["first_answer"]]),
+        "median_hours_to_first_answer": round(waits[len(waits) // 2], 1) if waits else None,
+    }
+    active_7d = len({u for d in daily[-7:] for u in days[d["date"]]["users"]})
+    active_30d = len({u for d in days.values() for u in d["users"]})
+    return {
+        "period": {"from": start.strftime("%Y-%m-%d"), "to": today.strftime("%Y-%m-%d")},
+        "totals": {"members": len(members), "active_7d": active_7d, "active_30d": active_30d,
+                   "posts_30d": len([p for p in posts if p["channel_id"] != commit_channel]),
+                   "commits_30d": len([p for p in posts if p["channel_id"] == commit_channel]),
+                   "comments_30d": len(comments), "likes_30d": sum(likes_by_post.values())},
+        "daily": daily,
+        "departments": [dict(name=k, **v) for k, v in sorted(departments.items())],
+        "channels": [dict(name=k, **v) for k, v in sorted(channels.items(), key=lambda x: -x[1]["posts"])],
+        "silent_users": silent[:50],
+        "silent_count": len(silent),
+        "top_posts": top_posts,
+        "forest": forest,
+    }
+
+
+def _insight_digest(company_name: str, s: Dict[str, Any]) -> str:
+    """AI に渡す文章。氏名・社員コード・メールアドレスは含めない。"""
+    t = s["totals"]
+    lines = ["# %s の社内 SNS 利用状況（%s 〜 %s）" % (company_name, s["period"]["from"], s["period"]["to"]), "",
+             "## 全体",
+             "- 在籍アカウント %d 人 / 直近 7 日にアクティブ %d 人 / 30 日にアクティブ %d 人"
+             % (t["members"], t["active_7d"], t["active_30d"]),
+             "- 30 日間: 投稿 %d 件、COMMIT %d 件、コメント %d 件、いいね %d 件"
+             % (t["posts_30d"], t["commits_30d"], t["comments_30d"], t["likes_30d"]),
+             "- 14 日以上ログインしていない人: %d 人" % s["silent_count"], "", "## 週ごとの推移"]
+    for i in range(0, 30, 7):
+        week = s["daily"][i:i + 7]
+        lines.append("- %s〜: 投稿 %d / コメント %d / 1 日あたりのアクティブ人数（最大）%d" % (
+            week[0]["date"], sum(d["posts"] for d in week), sum(d["comments"] for d in week),
+            max(d["active_users"] for d in week)))
+    lines += ["", "## 部署別（30 日）"]
+    for d in s["departments"]:
+        lines.append("- %s: %d 人中 %d 人がアクティブ、投稿 %d、コメント %d、受け取ったいいね %d" % (
+            d["name"], d["members"], d["active_30d"], d["posts"], d["comments"], d["likes_received"]))
+    lines += ["", "## チャンネル別（30 日）"]
+    for c in s["channels"][:15]:
+        lines.append("- %s: 投稿 %d、コメント %d、いいね %d" % (c["name"], c["posts"], c["comments"], c["likes"]))
+    f = s["forest"]
+    lines += ["", "## わからんの森（社内 Q&A）",
+              "- 30 日間の質問 %d 件（うち回答あり %d 件）、未回答のまま残っている質問 %d 件"
+              % (f["questions_30d"], f["answered_30d"], f["unanswered_open"]),
+              "- 最初の回答までの時間（中央値）: %s" % (
+                  "%s 時間" % f["median_hours_to_first_answer"] if f["median_hours_to_first_answer"] is not None
+                  else "データなし")]
+    lines += ["", "## 反応の多かった投稿（抜粋・氏名なし）"]
+    for p in s["top_posts"]:
+        lines.append("- [%s] 「%s」 いいね %d・コメント %d" % (
+            p["channel"], MENTION_OR_EMAIL.sub("（伏せ字）", p["excerpt"]), p["likes"], p["comments"]))
+    if not s["top_posts"]:
+        lines.append("- （反応のある投稿はまだありません）")
+    return "\n".join(lines)
+
+
+def _report_json(r: sqlite3.Row) -> Dict[str, Any]:
+    return {"id": r["id"], "provider": r["provider"], "model": r["model"], "content": r["content"],
+            "input_tokens": r["input_tokens"], "output_tokens": r["output_tokens"], "created_at": iso(r["created_at"])}
+
+
+@router.route("GET", "/api/admin/insights", auth="admin")
+def insights(ctx: Ctx) -> Response:
+    from . import ai
+    reports = ctx.db.execute("SELECT * FROM insight_reports WHERE company_id = ? ORDER BY id DESC LIMIT 10",
+                             (ctx.cid,)).fetchall()
+    return Response.json({"stats": _insight_stats(ctx), "ai": ai.status(),
+                          "reports": [_report_json(r) for r in reports]})
+
+
+@router.route("POST", "/api/admin/insights/generate", auth="admin")
+def generate_insight(ctx: Ctx) -> Response:
+    from . import ai
+    st = ai.status()
+    if not st["configured"]:
+        raise ApiError(400, "ai_not_configured", st["message"])
+    ctx.app.rate.check("insight:%d" % ctx.cid, limit=5, window=3600)
+    digest = _insight_digest(ctx.company["name"], _insight_stats(ctx))
+    try:
+        content, model, usage = ai.generate(digest)
+    except ai.AIError as err:
+        raise ApiError(502, "ai_failed", err.message)
+    cur = ctx.db.execute("INSERT INTO insight_reports (company_id, provider, model, content, input_tokens,"
+                         " output_tokens, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                         (ctx.cid, st["provider"], model, content, usage["input_tokens"], usage["output_tokens"],
+                          ctx.uid, now()))
+    audit(ctx.db, company_id=ctx.cid, actor_id=ctx.uid, action="admin.insights.generated",
+          detail={"provider": st["provider"], "model": model}, ip=ctx.req.ip)
+    row = ctx.db.execute("SELECT * FROM insight_reports WHERE id = ?", (cur.lastrowid,)).fetchone()
+    return Response.json({"report": _report_json(row)})

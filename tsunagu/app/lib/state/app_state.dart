@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
@@ -23,6 +25,19 @@ class AppState extends ChangeNotifier {
   Me? me;
   Company? company;
   int unreadCount = 0;
+
+  /// タブの未読・新着の印（GET /api/badges）。
+  Badges badges = const Badges();
+
+  /// メニュー・サイドバーに出すチャンネル（絵文字・未読数つき）。
+  List<Channel>? channels;
+
+  /// アプリ表示中に届いた新しい通知（上部のバナーで出す）。
+  final ValueNotifier<AppNotification?> banner = ValueNotifier<AppNotification?>(null);
+
+  final Set<int> _viewed = {};
+  final Set<int> _pendingViews = {};
+  Timer? _viewTimer;
 
   /// ログイン画面に出すお知らせ（セッション切れなど）。
   String? loginNotice;
@@ -77,11 +92,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> login({
-    required String companyCode,
-    required String loginId,
-    required String password,
-  }) async {
+  Future<void> login({required String companyCode, required String loginId, required String password}) async {
     final code = companyCode.trim().toUpperCase();
     final id = loginId.trim();
     final result = await api.login(companyCode: code, loginId: id, password: password);
@@ -137,8 +148,7 @@ class AppState extends ChangeNotifier {
       final r = await api.me();
       me = r.user;
       company = r.company;
-      if (r.unread != unreadCount ||
-          r.company.guidelinesVersion > r.user.guidelinesAcceptedVersion) {
+      if (r.unread != unreadCount || r.company.guidelinesVersion > r.user.guidelinesAcceptedVersion) {
         unreadCount = r.unread;
         _route();
       }
@@ -148,9 +158,103 @@ class AppState extends ChangeNotifier {
   }
 
   void setUnread(int count) {
-    if (count == unreadCount) return;
+    if (count == unreadCount && count == badges.notifications) return;
     unreadCount = count;
+    badges = badges.copyWith(notifications: count);
     notifyListeners();
+  }
+
+  /// 未読・新着の印を取り直す。通知が増えていたら、いちばん新しいものをバナーで出す。
+  Future<void> refreshBadges() async {
+    if (phase != AppPhase.ready) return;
+    try {
+      final b = await api.badges();
+      final increased = b.notifications > badges.notifications && badges.notifications >= 0;
+      final first = !_badgesLoaded;
+      _badgesLoaded = true;
+      badges = b;
+      unreadCount = b.notifications;
+      notifyListeners();
+      if (increased && !first) {
+        final page = await api.notifications();
+        final latest = page.notifications.where((n) => !n.read).toList();
+        if (latest.isNotEmpty) banner.value = latest.first;
+      }
+    } on ApiException {
+      // 定期更新の失敗は表示しない。
+    }
+  }
+
+  bool _badgesLoaded = false;
+
+  /// その画面を見たことをサーバーに伝え、印を消す。
+  void markSeen(String key) {
+    if (key == 'forest') badges = badges.copyWith(forestHasNew: false);
+    if (key == 'commit') badges = badges.copyWith(commitHasNew: false);
+    if (key.startsWith('channel-')) {
+      final id = int.tryParse(key.substring(8));
+      final list = channels;
+      if (id != null && list != null) {
+        channels = [for (final c in list) c.id == id ? c.withUnread(0) : c];
+      }
+    }
+    notifyListeners();
+    api.seen(key).catchError((_) {});
+  }
+
+  Future<void> loadChannels() async {
+    try {
+      channels = await api.channels();
+      notifyListeners();
+    } on ApiException {
+      // メニューは前の内容のまま。
+    }
+  }
+
+  /// 画面に出た投稿を記録する（まとめて送る）。
+  void trackView(int postId) {
+    if (!_viewed.add(postId)) return;
+    _pendingViews.add(postId);
+    _viewTimer ??= Timer(const Duration(seconds: 3), _flushViews);
+  }
+
+  void _flushViews() {
+    _viewTimer = null;
+    if (_pendingViews.isEmpty || phase != AppPhase.ready) return;
+    final ids = _pendingViews.toList();
+    _pendingViews.clear();
+    api.recordViews(ids).catchError((_) {});
+  }
+
+  /// 発信者が使えないときの理由（使えるなら null）。
+  String? identityUnavailableReason(Identity identity) {
+    final user = me;
+    final features = company?.features ?? const CompanyFeatures();
+    switch (identity) {
+      case Identity.real:
+        return null;
+      case Identity.department:
+        if (!features.identityDepartment) return '管理者が部署名での投稿をオフにしています';
+        if (user == null || user.department.isEmpty) return '部署が登録されていません（管理者に依頼してください）';
+        return null;
+      case Identity.anonymous:
+        if (!features.identityAnonymous) return '管理者が匿名での投稿をオフにしています';
+        if (user?.nickname == null) return 'プロフィールであだ名（匿名表示名）を設定してください';
+        return null;
+    }
+  }
+
+  /// 発信者を選んだときに表示される名前。
+  String identityPreview(Identity identity) {
+    final user = me;
+    switch (identity) {
+      case Identity.real:
+        return user?.displayName ?? '';
+      case Identity.department:
+        return user?.department.isNotEmpty == true ? user!.department : '部署 未設定';
+      case Identity.anonymous:
+        return user?.nickname ?? '匿名 未設定';
+    }
   }
 
   Future<void> logout({bool everywhere = false}) async {
@@ -223,6 +327,12 @@ class AppState extends ChangeNotifier {
     me = null;
     company = null;
     unreadCount = 0;
+    badges = const Badges();
+    _badgesLoaded = false;
+    channels = null;
+    banner.value = null;
+    _viewed.clear();
+    _pendingViews.clear();
     _tempPassword = null;
     loginNotice = notice;
     await _store.writeToken(null);

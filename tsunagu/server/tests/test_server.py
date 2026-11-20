@@ -281,10 +281,10 @@ class ServerTest(unittest.TestCase):
 
         status, data, _ = self.call("POST", "/api/posts/%d/comments" % post_id, {"body": "見ます！"}, sho)
         self.assertEqual(status, 200)
-        status, data, _ = self.call("PUT", "/api/posts/%d/reactions/thanks" % post_id, token=sho)
-        self.assertEqual(data["post"]["reactions"], [{"key": "thanks", "count": 1, "reacted_by_me": True}])
+        status, data, _ = self.call("PUT", "/api/posts/%d/like" % post_id, token=sho)
+        self.assertEqual((data["post"]["like_count"], data["post"]["liked_by_me"]), (1, True))
         self.assertEqual(data["post"]["comment_count"], 1)
-        self.assertEqual(self.call("PUT", "/api/posts/%d/reactions/angry" % post_id, token=sho)[0], 400)
+        self.assertNotIn("reactions", data["post"])
         kenta_notes = self.call("GET", "/api/notifications", token=kenta)[1]
         self.assertEqual(kenta_notes["notifications"][0]["type"], "comment")
 

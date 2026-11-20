@@ -193,7 +193,7 @@
     });
     if (!TsunaguPasskey.supported()) passkeyBtn.disabled = true;
     root.append(h('main', { class: 'login-wrap' }, h('section', { class: 'card login-card' },
-      h('span', { class: 'brandmark' }, h('span', { class: 'logo' }, 'つ'), 'つなぐ'),
+      h('span', { class: 'brandmark' }, h('span', { class: 'logo' }, 'M'), 'M'),
       h('h1', null, '管理コンソール'),
       h('p', { class: 'muted' }, '企業管理者のアカウントでログインしてください。'),
       message ? h('div', { class: 'alert warn' }, message) : null,
@@ -265,7 +265,7 @@
       }
     });
     root.append(h('main', { class: 'login-wrap' }, h('section', { class: 'card login-card' },
-      h('span', { class: 'brandmark' }, h('span', { class: 'logo' }, 'つ'), 'つなぐ'),
+      h('span', { class: 'brandmark' }, h('span', { class: 'logo' }, 'M'), 'M'),
       h('h1', null, '新しいパスワードを設定'),
       h('p', { class: 'muted' }, '初回ログインのため、仮パスワードから自分だけのパスワードに変更してください。記号も使えます。'),
       form,
@@ -282,15 +282,16 @@
 
   // ------------------------------------------------------------ 画面の枠
   const NAV = [
-    ['dashboard', 'ダッシュボード'], ['users', '社員アカウント'], ['channels', 'チャンネル'], ['reports', '通報'],
-    ['audit', '監査ログ'], ['settings', 'セキュリティ・規程'], ['mail', 'メール送信履歴'], ['account', '自分のアカウント'],
+    ['dashboard', 'ダッシュボード'], ['users', '社員アカウント'], ['channels', 'チャンネル'], ['forest', 'わからんの森'],
+    ['insights', 'AI インサイト'], ['reports', '通報'], ['audit', '監査ログ'], ['settings', 'セキュリティ・規程'],
+    ['mail', 'メール送信履歴'], ['account', '自分のアカウント'],
   ];
   let main = null;
 
   function renderShell() {
     clear(root);
     const nav = h('nav', { class: 'sidebar', 'aria-label': 'メニュー' },
-      h('span', { class: 'brandmark' }, h('span', { class: 'logo' }, 'つ'), 'つなぐ'),
+      h('span', { class: 'brandmark' }, h('span', { class: 'logo' }, 'M'), 'M'),
       h('div', { class: 'company' }, h('strong', null, S.company.name), '企業コード ' + S.company.code));
     NAV.forEach(function (n) {
       const btn = h('button', { class: 'nav-item' + (S.view === n[0] ? ' active' : ''), type: 'button' }, n[1],
@@ -303,8 +304,9 @@
       h('button', { class: 'nav-item', type: 'button', onclick: logout }, 'ログアウト'));
     main = h('main', { class: 'main' });
     root.append(h('div', { class: 'shell' }, nav, main));
-    const views = { dashboard: viewDashboard, users: viewUsers, channels: viewChannels, reports: viewReports,
-      audit: viewAudit, settings: viewSettings, mail: viewMail, account: viewAccount };
+    const views = { dashboard: viewDashboard, users: viewUsers, channels: viewChannels, forest: viewForest,
+      insights: viewInsights, reports: viewReports, audit: viewAudit, settings: viewSettings, mail: viewMail,
+      account: viewAccount };
     (views[S.view] || viewDashboard)().catch(function (e) {
       if (e.status !== 401) main.append(h('div', { class: 'alert error' }, e.message));
     });
@@ -596,7 +598,7 @@
       const kind = c.company_wide ? h('span', { class: 'badge brand' }, '全社') : c.visibility === 'private'
         ? h('span', { class: 'badge warn' }, '非公開') : h('span', { class: 'badge' }, '公開');
       tbody.append(h('tr', null,
-        h('td', null, h('strong', null, c.name), h('div', { class: 'sub' }, c.description || '—')),
+        h('td', null, h('strong', null, (c.emoji ? c.emoji + ' ' : '# ') + c.name), h('div', { class: 'sub' }, c.description || '—')),
         h('td', null, kind),
         h('td', { class: 'small' }, c.post_policy === 'admins' ? '管理者のみ' : '全員'),
         h('td', { class: 'small' }, c.member_count + '人'),
@@ -613,17 +615,19 @@
   function channelForm(c) {
     const err = errorBox();
     const name = input({ value: c ? c.name : '', maxlength: 40 });
+    const emoji = input({ value: c ? (c.emoji || '') : '', maxlength: 8, placeholder: '例：💬' });
     const desc = input({ value: c ? c.description : '', maxlength: 200 });
     const kind = select([['open', '公開（誰でも参加できる）'], ['private', '非公開（管理者が招待）'], ['company_wide', '全社（全員が自動で参加）']],
       c ? (c.company_wide ? 'company_wide' : c.visibility) : 'open');
     const policy = select([['everyone', '参加者全員'], ['admins', '管理者のみ（お知らせ用）']], c ? c.post_policy : 'everyone');
     const archived = h('input', { type: 'checkbox', checked: c ? c.archived : false });
     modal(c ? 'チャンネルの編集' : 'チャンネルを作成', h('div', null, err,
-      field('名前', name), field('説明', desc), field('種類', kind), field('投稿できる人', policy),
+      h('div', { class: 'grid-2' }, field('名前', name), field('絵文字', emoji, 'アプリの一覧に表示されます')),
+      field('説明', desc), field('種類', kind), field('投稿できる人', policy),
       c ? h('label', { class: 'check' }, archived, 'アーカイブする（閲覧のみ・新しい投稿は不可）') : null), [
       { label: 'キャンセル', onClick: function (close) { close(); } },
       { label: c ? '保存' : '作成', kind: 'primary', onClick: async function (close) {
-        const payload = { name: name.value, description: desc.value, post_policy: policy.value,
+        const payload = { name: name.value, emoji: emoji.value, description: desc.value, post_policy: policy.value,
           company_wide: kind.value === 'company_wide', visibility: kind.value === 'private' ? 'private' : 'open' };
         if (c) payload.archived = archived.checked;
         try {
@@ -678,7 +682,9 @@
         h('div', { class: 'small muted' }, fmt(r.created_at) + '・' + (r.target_type === 'post' ? '投稿' : 'コメント') + '・通報者 ' + r.reporter.display_name),
         h('div', null, h('strong', null, '理由：'), r.reason),
         h('div', { class: 'body' }, r.target_removed ? '（既に削除・非表示になっています）' : r.body),
-        h('div', { class: 'small muted' }, '投稿者：' + (r.author ? r.author.display_name + '（' + r.author.employee_code + '）' : '—')),
+        h('div', { class: 'small muted' }, '投稿者：' + (r.author ? r.author.display_name + '（' + r.author.employee_code + '）' : '—') +
+          (r.author_identity && r.author_identity !== 'real'
+            ? '　※「' + (r.author_display_name || '') + '」（' + (r.author_identity === 'anonymous' ? '匿名' : '部署名') + '）として発信。本人の名前は通報対応のためだけに表示しています' : '')),
         h('div', { class: 'toolbar' },
           h('button', { class: 'btn small primary', type: 'button', onclick: function () { resolve(r.id, 'hide'); } }, '非表示にする'),
           h('button', { class: 'btn small', type: 'button', onclick: function () { resolve(r.id, 'dismiss'); } }, '対応不要'))));
@@ -733,6 +739,9 @@
     const lockMin = input({ type: 'number', min: 1, max: 1440, value: s.lockout_minutes });
     const days = input({ type: 'number', min: 1, max: 90, value: s.session_days });
     const guide = h('textarea', { class: 'input', rows: 12, value: s.guidelines });
+    const deptFlag = h('input', { type: 'checkbox', checked: s.identity_department_enabled });
+    const anonFlag = h('input', { type: 'checkbox', checked: s.identity_anonymous_enabled });
+    const wmFlag = h('input', { type: 'checkbox', checked: s.watermark_mobile });
     main.append(head('セキュリティ・規程', '企業全体のパスワード規則・ロック・利用ガイドラインを設定します。'), err,
       h('section', { class: 'card section' }, h('h2', null, 'パスワード'),
         h('div', { class: 'grid-2' },
@@ -743,6 +752,11 @@
         h('div', { class: 'grid-2' },
           field('ロックするまでの失敗回数', lockN), field('ロックする時間（分）', lockMin)),
         field('ログイン状態を保つ日数', days, '過ぎると再ログインが必要です。変更は次回のログインから反映されます。')),
+      h('section', { class: 'card section' }, h('h2', null, '発信のしかた'),
+        h('label', { class: 'check' }, deptFlag, '部署名での投稿・コメントを許可する（例「営業部」として発信）'),
+        h('label', { class: 'check' }, anonFlag, '匿名（あだ名）での投稿・コメントを許可する'),
+        h('p', { class: 'small muted' }, '実名以外の発信は、他の社員にも管理者にも通常の画面では誰かわかりません。通報があったときだけ、管理者は通報の画面で本人を確認できます。'),
+        h('label', { class: 'check' }, wmFlag, 'スマホのアプリで、画面に「氏名 / 社員コード」の透かしを表示する（画面の撮影による持ち出し対策）')),
       h('section', { class: 'card section' }, h('h2', null, '社内SNS 利用ガイドライン'),
         h('p', { class: 'small muted' }, '内容を変更すると、全員が次にアプリを開いたときに再度同意を求められます（現在 第' + s.guidelines_version + '版）。'),
         guide),
@@ -753,6 +767,8 @@
             password_min_length: Number(minLen.value), password_require_symbol: sym.checked,
             temp_password_ttl_hours: Number(ttl.value), lockout_threshold: Number(lockN.value),
             lockout_minutes: Number(lockMin.value), session_days: Number(days.value), guidelines: guide.value,
+            identity_department_enabled: deptFlag.checked, identity_anonymous_enabled: anonFlag.checked,
+            watermark_mobile: wmFlag.checked,
           });
           toast('保存しました');
           renderShell();
@@ -818,6 +834,164 @@
           renderShell();
         } catch (e) { showError(err, e); window.scrollTo(0, 0); }
       } }, '変更する')));
+  }
+
+  // ------------------------------------------------------------ わからんの森（カテゴリ）
+  async function viewForest() {
+    const data = await api('GET', '/api/admin/forest-categories');
+    main.append(head('わからんの森', '社内 Q&A のカテゴリです。アプリの「森」に、この順番で並びます。', [
+      h('button', { class: 'btn primary', type: 'button', onclick: function () { categoryForm(null); } }, 'カテゴリを追加'),
+    ]));
+    const tbody = h('tbody');
+    data.categories.forEach(function (c) {
+      tbody.append(h('tr', null,
+        h('td', { class: 'nowrap' }, c.position),
+        h('td', null, h('strong', null, (c.emoji ? c.emoji + ' ' : '') + c.name), h('div', { class: 'sub' }, c.description || '—')),
+        h('td', { class: 'small' }, c.question_count + '件'),
+        h('td', { class: 'nowrap' }, h('button', { class: 'btn small', type: 'button', onclick: function () { categoryForm(c); } }, '編集'))));
+    });
+    main.append(h('div', { class: 'card table-wrap' }, h('table', { class: 'table' },
+      h('thead', null, h('tr', null, h('th', null, '並び順'), h('th', null, 'カテゴリ'), h('th', null, '質問'), h('th', null, ''))), tbody)));
+  }
+
+  function categoryForm(c) {
+    const err = errorBox();
+    const name = input({ value: c ? c.name : '', maxlength: 30 });
+    const emoji = input({ value: c ? c.emoji : '', maxlength: 8, placeholder: '例：🌳' });
+    const desc = input({ value: c ? c.description : '', maxlength: 200 });
+    const pos = input({ type: 'number', min: 0, max: 999, value: c ? c.position : 100 });
+    modal(c ? 'カテゴリの編集' : 'カテゴリを追加', h('div', null, err,
+      h('div', { class: 'grid-2' }, field('名前', name), field('絵文字', emoji)), field('説明', desc),
+      field('並び順', pos, '小さい数ほど上に表示されます')), [
+      { label: 'キャンセル', onClick: function (close) { close(); } },
+      { label: c ? '保存' : '追加', kind: 'primary', onClick: async function (close) {
+        const payload = { name: name.value, emoji: emoji.value, description: desc.value, position: Number(pos.value) };
+        try {
+          if (c) await api('PATCH', '/api/admin/forest-categories/' + c.id, payload);
+          else await api('POST', '/api/admin/forest-categories', payload);
+          close(); toast('保存しました'); renderShell();
+        } catch (e) { showError(err, e); }
+      } },
+    ]);
+  }
+
+  // ------------------------------------------------------------ AI インサイト
+  // AI の文章（Markdown）を安全に表示する（HTML として解釈しない）
+  function inline(text) {
+    const out = [];
+    text.split(/(\*\*[^*]+\*\*)/).forEach(function (part) {
+      if (/^\*\*[^*]+\*\*$/.test(part)) out.push(h('strong', null, part.slice(2, -2)));
+      else if (part) out.push(part);
+    });
+    return out;
+  }
+  function markdown(src) {
+    const box = h('div', { class: 'md' });
+    let list = null;
+    src.split('\n').forEach(function (line) {
+      const t = line.trim();
+      let m;
+      if (!t) { list = null; return; }
+      if ((m = /^(#{1,3})\s+(.*)$/.exec(t))) { list = null; box.append(h('h' + (m[1].length + 1), null, inline(m[2]))); return; }
+      if ((m = /^(?:[-*]|\d+[.)])\s+(.*)$/.exec(t))) {
+        if (!list) { list = h(/^\d/.test(t) ? 'ol' : 'ul'); box.append(list); }
+        list.append(h('li', null, inline(m[1]))); return;
+      }
+      list = null;
+      if (t.charAt(0) === '>') { box.append(h('blockquote', null, inline(t.replace(/^>\s?/, '')))); return; }
+      box.append(h('p', null, inline(t)));
+    });
+    return box;
+  }
+
+  async function viewInsights() {
+    const data = await api('GET', '/api/admin/insights');
+    const s = data.stats;
+    const t = s.totals;
+    function stat(label, value) {
+      return h('div', { class: 'card stat' }, h('div', { class: 'label' }, label), h('div', { class: 'value' }, value));
+    }
+    main.append(head('AI インサイト', s.period.from + ' 〜 ' + s.period.to + '（直近 30 日）の利用状況'));
+    main.append(h('div', { class: 'stats' },
+      stat('在籍アカウント', t.members), stat('7日間のアクティブ', t.active_7d), stat('30日間のアクティブ', t.active_30d),
+      stat('投稿', t.posts_30d), stat('COMMIT', t.commits_30d), stat('コメント', t.comments_30d), stat('いいね', t.likes_30d)));
+
+    // 日ごとの推移（棒グラフ）
+    const max = Math.max(1, ...s.daily.map(function (d) { return d.posts + d.comments; }));
+    const maxActive = Math.max(1, ...s.daily.map(function (d) { return d.active_users; }));
+    const bars = h('div', { class: 'bars', role: 'img', 'aria-label': '日ごとの投稿・コメント数とアクティブ人数' });
+    s.daily.forEach(function (d) {
+      const col = h('div', { class: 'bar-col', title: d.date + '：投稿 ' + d.posts + '・コメント ' + d.comments + '・アクティブ ' + d.active_users + '人' });
+      const stack = h('div', { class: 'bar-stack' });
+      const c = h('div', { class: 'bar comments' }); c.style.height = (d.comments / max * 100) + '%';
+      const p = h('div', { class: 'bar posts' }); p.style.height = (d.posts / max * 100) + '%';
+      stack.append(c, p);
+      const dot = h('div', { class: 'bar-active' }); dot.style.bottom = (d.active_users / maxActive * 100) + '%';
+      stack.append(dot);
+      col.append(stack, h('div', { class: 'bar-label' }, d.date.slice(8) === '01' || d === s.daily[0] ? d.date.slice(5).replace('-', '/') : d.date.slice(8)));
+      bars.append(col);
+    });
+    main.append(h('section', { class: 'card section' }, h('h2', null, '日ごとの動き'),
+      h('div', { class: 'legend small muted' }, h('span', { class: 'key posts' }), '投稿 ', h('span', { class: 'key comments' }), 'コメント ',
+        h('span', { class: 'key active' }), 'アクティブ人数'), bars));
+
+    function table(title, headers, rows, empty) {
+      const tbody = h('tbody');
+      rows.forEach(function (r) { tbody.append(h('tr', null, r.map(function (v, i) { return h('td', { class: i ? 'small nowrap' : '' }, v); }))); });
+      return h('section', { class: 'card section' }, h('h2', null, title),
+        rows.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'table' },
+          h('thead', null, h('tr', null, headers.map(function (x) { return h('th', null, x); }))), tbody))
+          : h('p', { class: 'muted' }, empty));
+    }
+    main.append(h('div', { class: 'grid-2' },
+      table('部署別', ['部署', '人数', 'アクティブ', '投稿', 'コメント', '受けたいいね'],
+        s.departments.map(function (d) { return [d.name, d.members, d.active_30d, d.posts, d.comments, d.likes_received]; }), 'データがありません'),
+      table('チャンネル別', ['チャンネル', '投稿', 'コメント', 'いいね'],
+        s.channels.map(function (c) { return [c.name, c.posts, c.comments, c.likes]; }), 'まだ投稿がありません')));
+    const f = s.forest;
+    main.append(h('div', { class: 'grid-2' },
+      h('section', { class: 'card section' }, h('h2', null, 'わからんの森'),
+        h('p', null, '30日間の質問 ' + f.questions_30d + '件（回答あり ' + f.answered_30d + '件）・未回答のまま ' + f.unanswered_open + '件'),
+        h('p', { class: 'muted' }, '最初の回答までの時間（中央値）：' + (f.median_hours_to_first_answer === null ? '—' : f.median_hours_to_first_answer + '時間'))),
+      table('しばらく見ていない人（14日以上）', ['氏名', '部署', '最終ログイン'],
+        s.silent_users.map(function (u) { return [u.display_name, u.department || '—', u.days_since_login === null ? '未ログイン' : u.days_since_login + '日前']; }),
+        '全員が最近ログインしています')));
+    main.append(table('反応の多かった投稿', ['投稿', 'チャンネル', 'いいね', 'コメント'],
+      s.top_posts.map(function (p) { return [p.excerpt, p.channel, p.likes, p.comments]; }), 'まだ反応のある投稿はありません'));
+
+    // AI レポート
+    const err = errorBox();
+    const gen = h('button', { class: 'btn primary', type: 'button', disabled: !data.ai.configured }, 'AI でレポートを作る');
+    const reports = h('div');
+    function renderReports(list) {
+      clear(reports);
+      if (!list.length) { reports.append(h('p', { class: 'muted' }, 'まだレポートはありません。')); return; }
+      list.forEach(function (r, i) {
+        const box = h('details', { class: 'report-item', open: i === 0 },
+          h('summary', null, fmt(r.created_at) + '・' + (r.provider === 'mock' ? 'テスト用の仮レポート' : r.model)),
+          markdown(r.content));
+        reports.append(box);
+      });
+    }
+    let current = data.reports.slice();
+    renderReports(current);
+    gen.addEventListener('click', async function () {
+      err.classList.add('hidden');
+      gen.disabled = true;
+      gen.textContent = '作成しています…（数十秒かかることがあります）';
+      try {
+        const res = await api('POST', '/api/admin/insights/generate', {});
+        current = [res.report].concat(current);
+        renderReports(current);
+        toast('レポートを作りました');
+      } catch (e) { showError(err, e); }
+      gen.disabled = !data.ai.configured;
+      gen.textContent = 'AI でレポートを作る';
+    });
+    main.append(h('section', { class: 'card section' }, h('h2', null, 'AI による定性レポート'),
+      h('div', { class: 'alert ' + (data.ai.configured ? 'ok' : 'warn') }, data.ai.message),
+      h('p', { class: 'small muted' }, '上の集計と、反応の多かった投稿の抜粋（氏名・社員コード・メールアドレスは伏せます）だけを使います。個人の評価には使わないでください。'),
+      err, h('div', { class: 'toolbar' }, gen), reports));
   }
 
   // ------------------------------------------------------------ 起動

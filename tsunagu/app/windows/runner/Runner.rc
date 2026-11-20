@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "io.github.manatoatoda" "\0"
-            VALUE "FileDescription", "Tsunagu" "\0"
+            VALUE "FileDescription", "M" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "tsunagu" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 io.github.manatoatoda. All rights reserved." "\0"
             VALUE "OriginalFilename", "tsunagu.exe" "\0"
-            VALUE "ProductName", "Tsunagu" "\0"
+            VALUE "ProductName", "M" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

@@ -51,7 +51,7 @@ def _record_success(ctx: Ctx, user: sqlite3.Row, company: sqlite3.Row, method: s
 @router.route("GET", "/api/meta", auth="public")
 def meta(ctx: Ctx) -> Response:
     return Response.json({
-        "service_name": "つなぐ",
+        "service_name": "M",
         "version": "0.1.0",
         "password_policy": passwords.policy_from_settings({}),
         "passkey": {"rp_id": ctx.cfg.rp_id, "login_url": ctx.cfg.public_url + "/passkey/login",
@@ -193,10 +193,24 @@ def get_me(ctx: Ctx) -> Response:
 
 @router.route("PATCH", "/api/me", auth="user")
 def patch_me(ctx: Ctx) -> Response:
+    from .uploads import own_upload
     data = ctx.req.json()
+    assert ctx.user is not None
+    changes: Dict[str, Any] = {}
     if "bio" in data:
-        bio = ctx.req.str_field("bio", required=False, max_len=300, label="自己紹介")
-        ctx.db.execute("UPDATE users SET bio = ?, updated_at = ? WHERE id = ?", (bio, now(), ctx.uid))
+        changes["bio"] = ctx.req.str_field("bio", required=False, max_len=300, label="自己紹介")
+    if "nickname" in data:
+        nickname = ctx.req.str_field("nickname", required=False, max_len=20, label="あだ名")
+        if nickname and nickname == ctx.user["display_name"]:
+            raise ApiError(400, "invalid_field", "あだ名は氏名と別のものにしてください", field="nickname")
+        changes["nickname"] = nickname or None
+    for field, column in (("avatar_upload_id", "avatar_upload"), ("cover_upload_id", "cover_upload")):
+        if field in data:
+            changes[column] = own_upload(ctx, data[field])["id"] if data[field] else None
+    if changes:
+        sets = ", ".join("%s = ?" % k for k in changes)
+        ctx.db.execute("UPDATE users SET %s, updated_at = ? WHERE id = ?" % sets,
+                       list(changes.values()) + [now(), ctx.uid])
     user = ctx.db.execute("SELECT * FROM users WHERE id = ?", (ctx.uid,)).fetchone()
     return Response.json({"user": me_json(ctx.db, user)})
 

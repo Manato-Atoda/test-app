@@ -139,10 +139,7 @@ class _PasskeysScreenState extends State<PasskeysScreen> {
                 : const LoadingFooter()
           else if (list.isEmpty)
             const ContentWidth(
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: Text('登録済みのパスキーはありません。'),
-              ),
+              child: Padding(padding: EdgeInsets.all(16), child: Text('登録済みのパスキーはありません。')),
             )
           else
             ContentWidth(
@@ -153,9 +150,7 @@ class _PasskeysScreenState extends State<PasskeysScreen> {
                       ListTile(
                         leading: const Icon(Icons.key),
                         title: Text(p.name),
-                        subtitle: Text(
-                          '登録: ${fullDateTime(p.createdAt)}\n最終利用: ${fullDateTime(p.lastUsedAt)}',
-                        ),
+                        subtitle: Text('登録: ${fullDateTime(p.createdAt)}\n最終利用: ${fullDateTime(p.lastUsedAt)}'),
                         isThreeLine: true,
                         trailing: IconButton(
                           tooltip: '削除',

@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, quote
 
-MAX_BODY = 2 * 1024 * 1024
+MAX_BODY = 9 * 1024 * 1024  # 画像のアップロード（8MB まで）を含む
 
 
 class ApiError(Exception):

@@ -121,6 +121,9 @@ class _SessionsScreenState extends State<SessionsScreen> {
         ),
       );
     }
-    return Scaffold(appBar: GlassAppBar(title: const Text('ログイン中の端末')), body: body);
+    return Scaffold(
+      appBar: GlassAppBar(title: const Text('ログイン中の端末')),
+      body: body,
+    );
   }
 }

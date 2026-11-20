@@ -65,14 +65,9 @@ class _SearchScreenState extends State<SearchScreen> {
           autofocus: true,
           textInputAction: TextInputAction.search,
           onSubmitted: (_) => _search(),
-          decoration: const InputDecoration(
-            hintText: '投稿を検索',
-            border: InputBorder.none,
-          ),
+          decoration: const InputDecoration(hintText: '投稿を検索', border: InputBorder.none),
         ),
-        actions: [
-          IconButton(tooltip: '検索', onPressed: _search, icon: const Icon(Icons.search)),
-        ],
+        actions: [IconButton(tooltip: '検索', onPressed: _search, icon: const Icon(Icons.search))],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
@@ -89,8 +84,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   child: PostCard(
                     key: ValueKey(results[i].id),
                     post: results[i],
-                    onChanged: _replace,
-                    onDeleted: _remove,
+                    callbacks: PostCallbacks(onChanged: _replace, onDeleted: _remove),
                   ),
                 ),
               ),

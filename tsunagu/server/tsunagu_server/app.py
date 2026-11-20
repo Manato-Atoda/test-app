@@ -10,7 +10,7 @@ import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Dict, Optional
 
-from . import admin, auth, sns
+from . import admin, auth, forest, sns, uploads
 from .accounts import hash_token
 from .config import Config
 from .db import connect, init_db, now
@@ -43,7 +43,7 @@ class App:
         self.cfg = cfg
         self.rate = RateLimiter()
         self.router = Router()
-        for module in (auth, sns, admin):
+        for module in (auth, sns, forest, uploads, admin):
             self.router.routes.extend(module.router.routes)
         self._log_lock = threading.Lock()
         init_db(cfg.db_path)
@@ -92,7 +92,7 @@ class App:
         try:
             handler, params, level = self.router.match(req.method, req.path)
             req.params = params
-            if req.method in ("POST", "PUT", "PATCH") and req.body:
+            if req.method in ("POST", "PUT", "PATCH") and req.body and req.path != "/api/uploads":
                 ctype = req.headers.get("content-type", "")
                 if not ctype.startswith("application/json"):
                     raise ApiError(415, "unsupported_media_type", "JSON で送信してください")
@@ -189,7 +189,7 @@ def serve(cfg: Config, host: str, port: int) -> None:
     app = App(cfg)
     httpd = ThreadingHTTPServer((host, port), make_handler(app))
     httpd.daemon_threads = True
-    app.log("つなぐ サーバー起動: http://%s:%d  （公開URL: %s / RP ID: %s / メール: %s）"
+    app.log("M サーバー起動: http://%s:%d  （公開URL: %s / RP ID: %s / メール: %s）"
             % (host, port, cfg.public_url, cfg.rp_id, cfg.mail_mode))
     try:
         httpd.serve_forever()

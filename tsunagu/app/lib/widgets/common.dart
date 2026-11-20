@@ -3,10 +3,12 @@ import 'package:material_ui/material_ui.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
 import '../theme.dart';
+import 'auth_image.dart';
+import 'brand.dart';
 
 /// 広い画面では中央寄せ・最大幅で表示する。
 class ContentWidth extends StatelessWidget {
-  const ContentWidth({super.key, required this.child, this.maxWidth = 720});
+  const ContentWidth({super.key, required this.child, this.maxWidth = 640});
 
   final Widget child;
   final double maxWidth;
@@ -35,22 +37,79 @@ class UserAvatar extends StatelessWidget {
     final color = avatarPalette[user.avatarColor.abs() % avatarPalette.length];
     final name = user.displayName.trim();
     final initial = name.isEmpty ? '?' : String.fromCharCode(name.runes.first);
+    final url = user.avatarUrl;
     return Semantics(
       label: user.displayName,
       excludeSemantics: true,
-      child: CircleAvatar(
-        radius: size / 2,
-        backgroundColor: user.isActive ? color : Colors.grey,
-        child: Text(
-          initial,
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-            fontSize: size * 0.42,
-          ),
+      child: SizedBox.square(
+        dimension: size,
+        child: ClipOval(
+          child: url != null
+              ? AuthImage(url, width: size, height: size)
+              : DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: user.isActive
+                        ? LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [color, Color.lerp(color, Colors.black, 0.18)!],
+                          )
+                        : null,
+                    color: user.isActive ? null : Colors.grey,
+                  ),
+                  child: Center(
+                    child: Text(
+                      initial,
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: size * 0.42),
+                    ),
+                  ),
+                ),
         ),
       ),
     );
+  }
+}
+
+/// 投稿者のアバター。実名ならその人、部署名・匿名なら専用の絵。
+class AuthorAvatar extends StatelessWidget {
+  const AuthorAvatar({super.key, required this.item, this.size = 40});
+
+  final Authored item;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final author = item.author;
+    if (item.identity == Identity.real && author != null) return UserAvatar(user: author, size: size);
+    final p = context.m;
+    final department = item.identity == Identity.department;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: department ? p.accentSoft : p.borderSoft,
+        border: Border.all(color: p.border),
+      ),
+      child: Icon(
+        department ? Icons.apartment_rounded : Icons.theater_comedy_outlined,
+        size: size * 0.5,
+        color: department ? p.accent : p.muted,
+      ),
+    );
+  }
+}
+
+/// 名前の横に付ける「部署」「匿名」のラベル。実名なら null。
+Widget? identityTag(BuildContext context, Identity identity) {
+  final p = context.m;
+  switch (identity) {
+    case Identity.real:
+      return null;
+    case Identity.department:
+      return TagPill('部署', small: true);
+    case Identity.anonymous:
+      return TagPill('匿名', small: true, color: p.muted, background: p.borderSoft);
   }
 }
 
@@ -67,13 +126,7 @@ String displayNameWithStatus(UserSummary user) {
 }
 
 class MessageView extends StatelessWidget {
-  const MessageView({
-    super.key,
-    required this.icon,
-    required this.message,
-    this.actionLabel,
-    this.onAction,
-  });
+  const MessageView({super.key, required this.icon, required this.message, this.actionLabel, this.onAction});
 
   final IconData icon;
   final String message;

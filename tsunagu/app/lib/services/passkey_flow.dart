@@ -22,19 +22,18 @@ class PasskeyFlow {
   final ApiClient api;
 
   static const _landingPage = '''<!DOCTYPE html>
-<html lang="ja"><head><meta charset="utf-8"><title>つなぐ</title>
+<html lang="ja"><head><meta charset="utf-8"><title>M</title>
 <style>body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f4f6fb;color:#1c2333}
 main{text-align:center}h1{font-size:20px}</style></head>
-<body><main><h1>つなぐ に戻ります</h1><p>このタブを閉じて、アプリに戻ってください。</p></main></body></html>''';
+<body><main><h1>M に戻ります</h1><p>このタブを閉じて、アプリに戻ってください。</p></main></body></html>''';
 
   /// 戻り先 URL（サーバーの許可リストと一致させる）。
   static String redirectUri(String target) => AppConfig.isDesktopLoopbackAuth
       ? 'http://localhost:${AppConfig.desktopCallbackPort}/$target'
       : '${AppConfig.urlScheme}://$target';
 
-  static String get _callbackScheme => AppConfig.isDesktopLoopbackAuth
-      ? 'http://localhost:${AppConfig.desktopCallbackPort}'
-      : AppConfig.urlScheme;
+  static String get _callbackScheme =>
+      AppConfig.isDesktopLoopbackAuth ? 'http://localhost:${AppConfig.desktopCallbackPort}' : AppConfig.urlScheme;
 
   static const _options = FlutterWebAuth2Options(
     // Windows / Linux はアプリ内 WebView ではなく既定のブラウザを使う
@@ -104,12 +103,7 @@ main{text-align:center}h1{font-size:20px}</style></head>
     final state = Pkce.randomUrlSafe(16);
     final base = Uri.parse(ticket.registerUrl);
     final url = base.replace(
-      queryParameters: {
-        ...base.queryParameters,
-        'redirect_uri': redirectUri('passkey'),
-        'state': state,
-        'name': name,
-      },
+      queryParameters: {...base.queryParameters, 'redirect_uri': redirectUri('passkey'), 'state': state, 'name': name},
     );
     final back = await _open(url);
     final params = back.queryParameters;

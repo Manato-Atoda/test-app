@@ -4,6 +4,7 @@ import '../api/api_client.dart';
 import '../config.dart';
 import '../services/passkey_flow.dart';
 import '../state/app_scope.dart';
+import '../widgets/brand.dart';
 import '../widgets/common.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -49,11 +50,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _notice = null;
     });
     try {
-      await AppScope.read(context).login(
-        companyCode: _company.text,
-        loginId: _loginId.text,
-        password: _password.text,
-      );
+      await AppScope.read(context).login(companyCode: _company.text, loginId: _loginId.text, password: _password.text);
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } finally {
@@ -72,10 +69,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _notice = null;
     });
     try {
-      await AppScope.read(context).loginWithPasskey(
-        companyCode: _company.text,
-        loginId: _loginId.text,
-      );
+      await AppScope.read(context).loginWithPasskey(companyCode: _company.text, loginId: _loginId.text);
     } on PasskeyCancelled {
       // 取り消しは何も出さない。
     } on ApiException catch (e) {
@@ -87,36 +81,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _serverSettings() async {
     final state = AppScope.read(context);
-    final controller = TextEditingController(text: state.serverUrl);
+    // 入力欄のコントローラーはダイアログ側で持つ（閉じるアニメーション中に破棄すると落ちるため）
     final result = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('接続先サーバー'),
-        content: SizedBox(
-          width: 420,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('通常は変更不要です。社内の管理者から指定された場合のみ変更してください。'),
-              const SizedBox(height: 12),
-              TextField(
-                controller: controller,
-                keyboardType: TextInputType.url,
-                autocorrect: false,
-                decoration: const InputDecoration(labelText: 'サーバーの URL', hintText: 'https://sns.example.co.jp'),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, ''), child: const Text('初期値に戻す')),
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
-          FilledButton(onPressed: () => Navigator.pop(context, controller.text), child: const Text('保存')),
-        ],
-      ),
+      builder: (context) => _ServerUrlDialog(initial: state.serverUrl),
     );
-    controller.dispose();
     if (result == null) return;
     if (result.trim().isEmpty) {
       await state.resetServerUrl();
@@ -131,150 +100,197 @@ class _LoginScreenState extends State<LoginScreen> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Icon(Icons.diversity_3_rounded, size: 56, color: scheme.primary),
-                  const SizedBox(height: 8),
-                  Text(
-                    AppConfig.appName,
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800),
-                  ),
-                  Text(
-                    '社内SNS',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-                  ),
-                  const SizedBox(height: 24),
-                  if (_notice != null) _Banner(text: _notice!, color: scheme.secondaryContainer),
-                  if (_error != null) _Banner(text: _error!, color: scheme.errorContainer),
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Form(
-                        key: _formKey,
-                        child: AutofillGroup(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              TextFormField(
-                                controller: _company,
-                                enabled: !_busy,
-                                textCapitalization: TextCapitalization.characters,
-                                autocorrect: false,
-                                enableSuggestions: false,
-                                // 企業コードは半角英数字のみ。日本語入力（IME）にならないよう英数字キーボードにする
-                                keyboardType: TextInputType.visiblePassword,
-                                textInputAction: TextInputAction.next,
-                                decoration: const InputDecoration(
-                                  labelText: '企業コード',
-                                  prefixIcon: Icon(Icons.apartment_outlined),
-                                ),
-                                validator: (v) => (v == null || v.trim().isEmpty) ? '企業コードを入力してください' : null,
-                              ),
-                              const SizedBox(height: 14),
-                              TextFormField(
-                                controller: _loginId,
-                                enabled: !_busy,
-                                autocorrect: false,
-                                enableSuggestions: false,
-                                keyboardType: TextInputType.emailAddress,
-                                textInputAction: TextInputAction.next,
-                                autofillHints: const [AutofillHints.username],
-                                decoration: const InputDecoration(
-                                  labelText: '社員コード または メールアドレス',
-                                  prefixIcon: Icon(Icons.badge_outlined),
-                                ),
-                                validator: (v) =>
-                                    (v == null || v.trim().isEmpty) ? '社員コードまたはメールアドレスを入力してください' : null,
-                              ),
-                              const SizedBox(height: 14),
-                              TextFormField(
-                                controller: _password,
-                                enabled: !_busy,
-                                obscureText: _obscure,
-                                autocorrect: false,
-                                enableSuggestions: false,
-                                textInputAction: TextInputAction.done,
-                                autofillHints: const [AutofillHints.password],
-                                onFieldSubmitted: (_) => _login(),
-                                decoration: InputDecoration(
-                                  labelText: 'パスワード',
-                                  prefixIcon: const Icon(Icons.lock_outline),
-                                  suffixIcon: IconButton(
-                                    tooltip: _obscure ? 'パスワードを表示' : 'パスワードを隠す',
-                                    icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
-                                    onPressed: () => setState(() => _obscure = !_obscure),
+      body: AuroraBackground(
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Center(child: MLogo(size: 64)),
+                    const SizedBox(height: 12),
+                    Center(
+                      child: GradientText(
+                        AppConfig.appName,
+                        style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                    Text(
+                      '社内SNS「M」（マル）',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 24),
+                    if (_notice != null) _Banner(text: _notice!, color: scheme.secondaryContainer),
+                    if (_error != null) _Banner(text: _error!, color: scheme.errorContainer),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Form(
+                          key: _formKey,
+                          child: AutofillGroup(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                TextFormField(
+                                  controller: _company,
+                                  enabled: !_busy,
+                                  textCapitalization: TextCapitalization.characters,
+                                  autocorrect: false,
+                                  enableSuggestions: false,
+                                  // 企業コードは半角英数字のみ。日本語入力（IME）にならないよう英数字キーボードにする
+                                  keyboardType: TextInputType.visiblePassword,
+                                  textInputAction: TextInputAction.next,
+                                  decoration: const InputDecoration(
+                                    labelText: '企業コード',
+                                    prefixIcon: Icon(Icons.apartment_outlined),
                                   ),
+                                  validator: (v) => (v == null || v.trim().isEmpty) ? '企業コードを入力してください' : null,
                                 ),
-                                validator: (v) => (v == null || v.isEmpty) ? 'パスワードを入力してください' : null,
-                              ),
-                              const SizedBox(height: 20),
-                              FilledButton(
-                                onPressed: _busy ? null : _login,
-                                style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-                                child: _busy
-                                    ? const SizedBox.square(
-                                        dimension: 20,
-                                        child: CircularProgressIndicator(strokeWidth: 2),
-                                      )
-                                    : const Text('ログイン'),
-                              ),
-                              const SizedBox(height: 16),
-                              Row(
-                                children: [
-                                  const Expanded(child: Divider()),
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                                    child: Text('または', style: theme.textTheme.bodySmall),
+                                const SizedBox(height: 14),
+                                TextFormField(
+                                  controller: _loginId,
+                                  enabled: !_busy,
+                                  autocorrect: false,
+                                  enableSuggestions: false,
+                                  keyboardType: TextInputType.emailAddress,
+                                  textInputAction: TextInputAction.next,
+                                  autofillHints: const [AutofillHints.username],
+                                  decoration: const InputDecoration(
+                                    labelText: '社員コード または メールアドレス',
+                                    prefixIcon: Icon(Icons.badge_outlined),
                                   ),
-                                  const Expanded(child: Divider()),
-                                ],
-                              ),
-                              const SizedBox(height: 16),
-                              OutlinedButton.icon(
-                                onPressed: _busy ? null : _passkeyLogin,
-                                style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-                                icon: const Icon(Icons.key_outlined),
-                                label: const Text('パスキーでログイン'),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                'パスキーは、ログイン後に「メニュー → パスキー」で登録できます。',
-                                textAlign: TextAlign.center,
-                                style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-                              ),
-                            ],
+                                  validator: (v) => (v == null || v.trim().isEmpty) ? '社員コードまたはメールアドレスを入力してください' : null,
+                                ),
+                                const SizedBox(height: 14),
+                                TextFormField(
+                                  controller: _password,
+                                  enabled: !_busy,
+                                  obscureText: _obscure,
+                                  autocorrect: false,
+                                  enableSuggestions: false,
+                                  textInputAction: TextInputAction.done,
+                                  autofillHints: const [AutofillHints.password],
+                                  onFieldSubmitted: (_) => _login(),
+                                  decoration: InputDecoration(
+                                    labelText: 'パスワード',
+                                    prefixIcon: const Icon(Icons.lock_outline),
+                                    suffixIcon: IconButton(
+                                      tooltip: _obscure ? 'パスワードを表示' : 'パスワードを隠す',
+                                      icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                                      onPressed: () => setState(() => _obscure = !_obscure),
+                                    ),
+                                  ),
+                                  validator: (v) => (v == null || v.isEmpty) ? 'パスワードを入力してください' : null,
+                                ),
+                                const SizedBox(height: 20),
+                                GradientButton(
+                                  label: 'ログイン',
+                                  expand: true,
+                                  height: 48,
+                                  busy: _busy,
+                                  onPressed: _busy ? null : _login,
+                                ),
+                                const SizedBox(height: 16),
+                                Row(
+                                  children: [
+                                    const Expanded(child: Divider()),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                                      child: Text('または', style: theme.textTheme.bodySmall),
+                                    ),
+                                    const Expanded(child: Divider()),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                OutlinedButton.icon(
+                                  onPressed: _busy ? null : _passkeyLogin,
+                                  style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+                                  icon: const Icon(Icons.key_outlined),
+                                  label: const Text('パスキーでログイン'),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'パスキーは、ログイン後に「メニュー → パスキー」で登録できます。',
+                                  textAlign: TextAlign.center,
+                                  style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'アカウントは会社の管理者が発行します。\nログインできない場合は、社内の管理者にお問い合わせください。',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-                  ),
-                  const SizedBox(height: 8),
-                  TextButton.icon(
-                    onPressed: _busy ? null : _serverSettings,
-                    icon: const Icon(Icons.settings_outlined, size: 18),
-                    label: const Text('詳細設定（接続先）'),
-                  ),
-                ],
+                    const SizedBox(height: 16),
+                    Text(
+                      'アカウントは会社の管理者が発行します。\nログインできない場合は、社内の管理者にお問い合わせください。',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: _busy ? null : _serverSettings,
+                      icon: const Icon(Icons.settings_outlined, size: 18),
+                      label: const Text('詳細設定（接続先）'),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ServerUrlDialog extends StatefulWidget {
+  const _ServerUrlDialog({required this.initial});
+
+  final String initial;
+
+  @override
+  State<_ServerUrlDialog> createState() => _ServerUrlDialogState();
+}
+
+class _ServerUrlDialogState extends State<_ServerUrlDialog> {
+  late final TextEditingController _controller = TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('接続先サーバー'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('通常は変更不要です。社内の管理者から指定された場合のみ変更してください。'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _controller,
+              keyboardType: TextInputType.url,
+              autocorrect: false,
+              decoration: const InputDecoration(labelText: 'サーバーの URL', hintText: 'https://sns.example.co.jp'),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, ''), child: const Text('初期値に戻す')),
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
+        FilledButton(onPressed: () => Navigator.pop(context, _controller.text), child: const Text('保存')),
+      ],
     );
   }
 }

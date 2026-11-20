@@ -5,6 +5,7 @@ import '../api/models.dart';
 import '../state/app_scope.dart';
 import '../utils/format.dart';
 import '../widgets/common.dart';
+import 'forest_screens.dart';
 import 'post_detail_screen.dart';
 import '../widgets/glass.dart';
 
@@ -95,17 +96,10 @@ class NotificationsScreenState extends State<NotificationsScreen> {
       state.setUnread(state.unreadCount > 0 ? state.unreadCount - 1 : 0);
       state.api.readNotification(n.id).catchError((_) {});
     }
-    final postId = n.postId;
-    if (postId == null) return;
-    await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => PostDetailScreen(postId: postId)));
+    await openNotificationTarget(context, n);
   }
 
-  IconData _icon(String type) => switch (type) {
-    'comment' => Icons.chat_bubble_outline,
-    'mention' => Icons.alternate_email,
-    'announcement' => Icons.campaign_outlined,
-    _ => Icons.notifications_outlined,
-  };
+  IconData _icon(String type) => notificationIcon(type);
 
   @override
   Widget build(BuildContext context) {
@@ -181,4 +175,25 @@ class NotificationsScreenState extends State<NotificationsScreen> {
       body: body,
     );
   }
+}
+
+IconData notificationIcon(String type) => switch (type) {
+  'comment' => Icons.chat_bubble_outline,
+  'mention' => Icons.alternate_email,
+  'announcement' => Icons.campaign_outlined,
+  'answer' => Icons.park_outlined,
+  'answer_comment' => Icons.forum_outlined,
+  'share' => Icons.repeat_rounded,
+  'quote' => Icons.format_quote_rounded,
+  _ => Icons.notifications_outlined,
+};
+
+/// 通知の飛び先（投稿 / 森の質問）を開く。
+Future<void> openNotificationTarget(BuildContext context, AppNotification n) async {
+  final target = n.target;
+  if (target == null) return;
+  final Widget screen = target.type == 'question'
+      ? QuestionDetailScreen(questionId: target.id)
+      : PostDetailScreen(postId: target.id);
+  await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
 }

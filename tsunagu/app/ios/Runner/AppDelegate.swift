@@ -135,12 +135,20 @@ final class TsunaguTabBarView: NSObject, FlutterPlatformView, UITabBarDelegate {
     tabBar.selectedItem = items[index]
   }
 
-  /// 未読の数などのバッジ（空文字はバッジなし）
+  /// 未読の数などのバッジ（空文字はバッジなし、"dot" は数のない赤い点）
   private func setBadges(_ value: Any?) {
     guard let badges = value as? [String], let items = tabBar.items else { return }
     for (index, item) in items.enumerated() {
       let badge = badges.indices.contains(index) ? badges[index] : ""
-      item.badgeValue = badge.isEmpty ? nil : badge
+      switch badge {
+      case "":
+        item.badgeValue = nil
+      case "dot":
+        // 空文字のバッジは、数字のない小さな点として表示される
+        item.badgeValue = ""
+      default:
+        item.badgeValue = badge
+      }
     }
   }
 

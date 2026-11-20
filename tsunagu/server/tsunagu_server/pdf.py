@@ -29,7 +29,7 @@ class AccountNotice:
     login_url: str
     min_length: int = 8
     require_symbol: bool = False
-    service_name: str = "つなぐ"
+    service_name: str = "M"
 
 
 def _jp_hex(text: str) -> str:

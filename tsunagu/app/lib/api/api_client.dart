@@ -16,13 +16,9 @@ class ApiException implements Exception {
   final Json extra;
 
   /// セッション切れなど、ログイン画面へ戻すべきエラーか。
-  bool get isSessionError =>
-      status == 401 &&
-      code != 'invalid_credentials' &&
-      code != 'invalid_current_password';
+  bool get isSessionError => status == 401 && code != 'invalid_credentials' && code != 'invalid_current_password';
 
-  bool get isPasswordChangeRequired =>
-      status == 403 && code == 'password_change_required';
+  bool get isPasswordChangeRequired => status == 403 && code == 'password_change_required';
 
   /// パスワード規則違反の詳細（400 password_policy）。
   List<String> get details {
@@ -36,10 +32,9 @@ class ApiException implements Exception {
 
 typedef AuthFailureHandler = void Function(ApiException e);
 
-/// つなぐ API の薄いクライアント。
+/// M API の薄いクライアント。
 class ApiClient {
-  ApiClient({required this.baseUrl, http.Client? client})
-    : _http = client ?? http.Client();
+  ApiClient({required this.baseUrl, http.Client? client}) : _http = client ?? http.Client();
 
   String baseUrl;
   String? token;
@@ -63,7 +58,10 @@ class ApiClient {
     String path, {
     Map<String, Object?>? query,
     Object? body,
+    List<int>? rawBody,
+    String? rawContentType,
     bool auth = true,
+    Duration timeout = _timeout,
   }) async {
     final request = http.Request(method, _uri(path, query));
     request.headers['Accept'] = 'application/json';
@@ -74,12 +72,15 @@ class ApiClient {
       request.headers['Content-Type'] = 'application/json; charset=utf-8';
       // bodyBytes を設定すると Content-Length が付く（チャンク転送にしない）。
       request.bodyBytes = utf8.encode(jsonEncode(body));
+    } else if (rawBody != null) {
+      request.headers['Content-Type'] = rawContentType ?? 'application/octet-stream';
+      request.bodyBytes = rawBody;
     }
 
     http.Response response;
     try {
-      final streamed = await _http.send(request).timeout(_timeout);
-      response = await http.Response.fromStream(streamed).timeout(_timeout);
+      final streamed = await _http.send(request).timeout(timeout);
+      response = await http.Response.fromStream(streamed).timeout(timeout);
     } on TimeoutException {
       throw const ApiException(0, 'timeout', 'サーバーの応答がありません。しばらくしてからもう一度お試しください。');
     } catch (_) {
@@ -124,10 +125,7 @@ class ApiClient {
     return 'エラーが発生しました（$status）。';
   }
 
-  Map<String, String> get _device => {
-    'platform': AppConfig.platformId,
-    'name': AppConfig.deviceLabel,
-  };
+  Map<String, String> get _device => {'platform': AppConfig.platformId, 'name': AppConfig.deviceLabel};
 
   // ---- 公開・認証 ----
 
@@ -136,43 +134,35 @@ class ApiClient {
     return PasswordPolicy.fromJson((j['password_policy'] as Map?)?.cast<String, dynamic>() ?? const {});
   }
 
-  Future<AuthResult> login({
-    required String companyCode,
-    required String loginId,
-    required String password,
-  }) async {
-    final j = await _send('POST', '/api/auth/login', auth: false, body: {
-      'company_code': companyCode,
-      'login_id': loginId,
-      'password': password,
-      'device': _device,
-    });
+  Future<AuthResult> login({required String companyCode, required String loginId, required String password}) async {
+    final j = await _send(
+      'POST',
+      '/api/auth/login',
+      auth: false,
+      body: {'company_code': companyCode, 'login_id': loginId, 'password': password, 'device': _device},
+    );
     return AuthResult.fromJson(j);
   }
 
   Future<PasswordPolicy> passwordPolicy() async =>
       PasswordPolicy.fromJson(await _send('GET', '/api/auth/password-policy'));
 
-  Future<AuthResult> changePassword({
-    required String currentPassword,
-    required String newPassword,
-  }) async {
-    final j = await _send('POST', '/api/auth/change-password', body: {
-      'current_password': currentPassword,
-      'new_password': newPassword,
-    });
+  Future<AuthResult> changePassword({required String currentPassword, required String newPassword}) async {
+    final j = await _send(
+      'POST',
+      '/api/auth/change-password',
+      body: {'current_password': currentPassword, 'new_password': newPassword},
+    );
     return AuthResult.fromJson(j);
   }
 
-  Future<AuthResult> exchangeCode({
-    required String code,
-    required String codeVerifier,
-  }) async {
-    final j = await _send('POST', '/api/auth/exchange', auth: false, body: {
-      'code': code,
-      'code_verifier': codeVerifier,
-      'device': _device,
-    });
+  Future<AuthResult> exchangeCode({required String code, required String codeVerifier}) async {
+    final j = await _send(
+      'POST',
+      '/api/auth/exchange',
+      auth: false,
+      body: {'code': code, 'code_verifier': codeVerifier, 'device': _device},
+    );
     return AuthResult.fromJson(j);
   }
 
@@ -191,8 +181,22 @@ class ApiClient {
     );
   }
 
-  Future<Me> updateBio(String bio) async {
-    final j = await _send('PATCH', '/api/me', body: {'bio': bio});
+  /// プロフィールの更新（v2）。null の項目は送らない。画像を外すときは [removeAvatar] / [removeCover]。
+  Future<Me> updateProfile({
+    String? bio,
+    String? nickname,
+    String? avatarUploadId,
+    String? coverUploadId,
+    bool removeAvatar = false,
+    bool removeCover = false,
+  }) async {
+    final body = <String, Object?>{
+      'bio': ?bio,
+      'nickname': ?nickname,
+      if (avatarUploadId != null || removeAvatar) 'avatar_upload_id': avatarUploadId,
+      if (coverUploadId != null || removeCover) 'cover_upload_id': coverUploadId,
+    };
+    final j = await _send('PATCH', '/api/me', body: body);
     return Me.fromJson((j['user'] as Map).cast<String, dynamic>());
   }
 
@@ -221,17 +225,42 @@ class ApiClient {
 
   Future<void> deletePasskey(int id) => _send('DELETE', '/api/me/passkeys/$id');
 
-  Future<PasskeyTicket> passkeyTicket() async =>
-      PasskeyTicket.fromJson(await _send('POST', '/api/me/passkeys/ticket'));
+  Future<PasskeyTicket> passkeyTicket() async => PasskeyTicket.fromJson(await _send('POST', '/api/me/passkeys/ticket'));
 
-  // ---- SNS ----
+  // ---- 画像 ----
+
+  /// 画像のアップロード（本文は画像そのもの）。
+  Future<ImageRef> upload(List<int> bytes, String contentType) async {
+    final j = await _send(
+      'POST',
+      '/api/uploads',
+      rawBody: bytes,
+      rawContentType: contentType,
+      timeout: const Duration(seconds: 90),
+    );
+    return ImageRef.fromJson(j);
+  }
+
+  /// サーバーが返す相対 URL（/api/uploads/...）を絶対 URL にする。
+  String absoluteUrl(String url) => url.startsWith('http') ? url : '$baseUrl$url';
+
+  /// 画像の読み込みに付けるヘッダー（ログイン中のみ）。
+  Map<String, String> get imageHeaders => token == null ? const {} : {'Authorization': 'Bearer $token'};
+
+  // ---- バッジ・既読・右の欄 ----
+
+  Future<Badges> badges() async => Badges.fromJson(await _send('GET', '/api/badges'));
+
+  /// key = home / forest / commit / channel-{id}
+  Future<void> seen(String key) => _send('POST', '/api/seen/$key');
+
+  Future<Highlights> highlights() async => Highlights.fromJson(await _send('GET', '/api/highlights'));
+
+  // ---- チャンネル ----
 
   Future<List<Channel>> channels() async {
     final j = await _send('GET', '/api/channels');
-    return ((j['channels'] as List?) ?? const [])
-        .whereType<Map>()
-        .map((e) => Channel.fromJson(e.cast<String, dynamic>()))
-        .toList();
+    return _list(j['channels']).map(Channel.fromJson).toList();
   }
 
   Future<Channel> channel(int id) async {
@@ -249,30 +278,41 @@ class ApiClient {
     return Channel.fromJson((j['channel'] as Map).cast<String, dynamic>());
   }
 
-  Future<FeedPage> feed({int? channelId, String? kind, int? before, int limit = 20}) async {
-    final j = await _send('GET', '/api/feed', query: {
-      'channel_id': channelId,
-      'kind': kind,
-      'before': before,
-      'limit': limit,
-    });
+  // ---- 投稿 ----
+
+  Future<FeedPage> feed({int? channelId, String? kind, int? before, int? after, int limit = 20}) async {
+    final j = await _send(
+      'GET',
+      '/api/feed',
+      query: {'channel_id': channelId, 'kind': kind, 'before': before, 'after': after, 'limit': limit},
+    );
     return FeedPage.fromJson(j);
   }
 
   Post _post(Json j) => Post.fromJson((j['post'] as Map).cast<String, dynamic>());
 
   Future<Post> createPost({
-    required int channelId,
+    required int? channelId,
     required String body,
     bool announcement = false,
     bool requireAck = false,
+    Identity identity = Identity.real,
+    List<String> imageIds = const [],
+    int? quoteOf,
   }) async {
-    final j = await _send('POST', '/api/posts', body: {
-      'channel_id': channelId,
-      'body': body,
-      'kind': announcement ? 'announcement' : 'post',
-      'require_ack': announcement && requireAck,
-    });
+    final j = await _send(
+      'POST',
+      '/api/posts',
+      body: {
+        'channel_id': channelId,
+        'body': body,
+        'kind': announcement ? 'announcement' : 'post',
+        'require_ack': announcement && requireAck,
+        'identity': announcement ? Identity.real.value : identity.value,
+        'image_ids': imageIds,
+        'quote_of': ?quoteOf,
+      },
+    );
     return _post(j);
   }
 
@@ -283,29 +323,131 @@ class ApiClient {
 
   Future<void> deletePost(int id) => _send('DELETE', '/api/posts/$id');
 
-  Future<Comment> addComment(int postId, String body) async {
-    final j = await _send('POST', '/api/posts/$postId/comments', body: {'body': body});
+  Future<Post> setLike(int postId, bool on) async =>
+      _post(await _send(on ? 'PUT' : 'DELETE', '/api/posts/$postId/like'));
+
+  Future<Post> setBookmark(int postId, bool on) async =>
+      _post(await _send(on ? 'PUT' : 'DELETE', '/api/posts/$postId/bookmark'));
+
+  /// そのままシェア。作られた share を返す。
+  Future<Post> share(int postId) async => _post(await _send('POST', '/api/posts/$postId/share'));
+
+  /// 自分のシェアを取り消す。元の投稿を返す。
+  Future<Post> unshare(int postId) async => _post(await _send('DELETE', '/api/posts/$postId/share'));
+
+  Future<void> recordViews(List<int> ids) => _send('POST', '/api/posts/views', body: {'ids': ids});
+
+  Future<FeedPage> bookmarks({String kind = 'post', int? before}) async =>
+      FeedPage.fromJson(await _send('GET', '/api/bookmarks', query: {'kind': kind, 'before': before}));
+
+  Future<Comment> addComment(int postId, {String? body, Identity identity = Identity.real, int? quickIndex}) async {
+    final j = await _send(
+      'POST',
+      '/api/posts/$postId/comments',
+      body: {'body': ?body, 'identity': identity.value, 'quick_index': ?quickIndex},
+    );
+    return Comment.fromJson((j['comment'] as Map).cast<String, dynamic>());
+  }
+
+  Future<Comment> editComment(int id, String body) async {
+    final j = await _send('PATCH', '/api/comments/$id', body: {'body': body});
+    return Comment.fromJson((j['comment'] as Map).cast<String, dynamic>());
+  }
+
+  Future<Comment> setCommentLike(int id, bool on) async {
+    final j = await _send(on ? 'PUT' : 'DELETE', '/api/comments/$id/like');
     return Comment.fromJson((j['comment'] as Map).cast<String, dynamic>());
   }
 
   Future<void> deleteComment(int id) => _send('DELETE', '/api/comments/$id');
 
-  Future<Post> setReaction(int postId, String key, bool on) async =>
-      _post(await _send(on ? 'PUT' : 'DELETE', '/api/posts/$postId/reactions/$key'));
-
   Future<Post> acknowledge(int postId) async => _post(await _send('POST', '/api/posts/$postId/ack'));
 
   Future<AckStatus> acks(int postId) async => AckStatus.fromJson(await _send('GET', '/api/posts/$postId/acks'));
 
-  Future<void> report({
-    required String targetType,
-    required int targetId,
-    required String reason,
-  }) => _send('POST', '/api/reports', body: {
-    'target_type': targetType,
-    'target_id': targetId,
-    'reason': reason,
-  });
+  Future<void> report({required String targetType, required int targetId, required String reason}) =>
+      _send('POST', '/api/reports', body: {'target_type': targetType, 'target_id': targetId, 'reason': reason});
+
+  // ---- 下書き ----
+
+  Future<List<Draft>> drafts() async =>
+      _list((await _send('GET', '/api/drafts'))['drafts']).map(Draft.fromJson).toList();
+
+  Future<Draft> saveDraft({required String body, required Identity identity, int? channelId}) async {
+    final j = await _send(
+      'POST',
+      '/api/drafts',
+      body: {'body': body, 'identity': identity.value, 'channel_id': channelId},
+    );
+    return Draft.fromJson((j['draft'] as Map).cast<String, dynamic>());
+  }
+
+  Future<void> deleteDraft(int id) => _send('DELETE', '/api/drafts/$id');
+
+  // ---- COMMIT ----
+
+  Future<FeedPage> commits({int? userId, String period = 'all', int? before}) async => FeedPage.fromJson(
+    await _send('GET', '/api/commits', query: {'user_id': userId, 'period': period, 'before': before}),
+  );
+
+  Future<Post> createCommit({required String body, List<String> imageIds = const []}) async =>
+      _post(await _send('POST', '/api/commits', body: {'body': body, 'image_ids': imageIds}));
+
+  // ---- わからんの森 ----
+
+  Future<ForestHome> forest() async => ForestHome.fromJson(await _send('GET', '/api/forest'));
+
+  Future<QuestionPage> questions({int? categoryId, String? filter, int? before}) async => QuestionPage.fromJson(
+    await _send('GET', '/api/forest/questions', query: {'category_id': categoryId, 'filter': filter, 'before': before}),
+  );
+
+  Future<Question> ask({
+    required int categoryId,
+    required String title,
+    required String body,
+    required Identity identity,
+  }) async {
+    final j = await _send(
+      'POST',
+      '/api/forest/questions',
+      body: {'category_id': categoryId, 'title': title, 'body': body, 'identity': identity.value},
+    );
+    return Question.fromJson((j['question'] as Map).cast<String, dynamic>());
+  }
+
+  Future<QuestionDetail> question(int id) async =>
+      QuestionDetail.fromJson(await _send('GET', '/api/forest/questions/$id'));
+
+  Future<void> deleteQuestion(int id) => _send('DELETE', '/api/forest/questions/$id');
+
+  Future<Answer> answer(int questionId, {required String body, required Identity identity}) async {
+    final j = await _send(
+      'POST',
+      '/api/forest/questions/$questionId/answers',
+      body: {'body': body, 'identity': identity.value},
+    );
+    return Answer.fromJson((j['answer'] as Map).cast<String, dynamic>());
+  }
+
+  Future<void> deleteAnswer(int id) => _send('DELETE', '/api/forest/answers/$id');
+
+  Future<Answer> setAnswerLike(int id, bool on) async {
+    final j = await _send(on ? 'PUT' : 'DELETE', '/api/forest/answers/$id/like');
+    return Answer.fromJson((j['answer'] as Map).cast<String, dynamic>());
+  }
+
+  Future<AnswerComment> commentOnAnswer(int answerId, {required String body, required Identity identity}) async {
+    final j = await _send(
+      'POST',
+      '/api/forest/answers/$answerId/comments',
+      body: {'body': body, 'identity': identity.value},
+    );
+    return AnswerComment.fromJson((j['comment'] as Map).cast<String, dynamic>());
+  }
+
+  Future<void> deleteAnswerComment(int id) => _send('DELETE', '/api/forest/answer-comments/$id');
+
+  // ---- 通知・名簿・検索 ----
 
   Future<NotificationPage> notifications({int? before}) async =>
       NotificationPage.fromJson(await _send('GET', '/api/notifications', query: {'before': before}));
@@ -316,19 +458,16 @@ class ApiClient {
 
   Future<List<UserSummary>> directory({String? q}) async {
     final j = await _send('GET', '/api/directory', query: {'q': q});
-    return ((j['users'] as List?) ?? const [])
-        .whereType<Map>()
-        .map((e) => UserSummary.fromJson(e.cast<String, dynamic>()))
-        .toList();
+    return _list(j['users']).map(UserSummary.fromJson).toList();
   }
 
   Future<UserProfile> user(int id) async => UserProfile.fromJson(await _send('GET', '/api/users/$id'));
 
   Future<List<Post>> search(String q) async {
     final j = await _send('GET', '/api/search', query: {'q': q});
-    return ((j['posts'] as List?) ?? const [])
-        .whereType<Map>()
-        .map((e) => Post.fromJson(e.cast<String, dynamic>()))
-        .toList();
+    return _list(j['posts']).map(Post.fromJson).toList();
   }
+
+  static List<Json> _list(Object? v) =>
+      v is List ? v.whereType<Map>().map((e) => e.cast<String, dynamic>()).toList() : const [];
 }

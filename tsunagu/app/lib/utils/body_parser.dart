@@ -8,8 +8,7 @@ class BodySegment {
   final String text;
 
   @override
-  bool operator ==(Object other) =>
-      other is BodySegment && other.type == type && other.text == text;
+  bool operator ==(Object other) => other is BodySegment && other.type == type && other.text == text;
 
   @override
   int get hashCode => Object.hash(type, text);
@@ -18,9 +17,7 @@ class BodySegment {
   String toString() => '${type.name}:$text';
 }
 
-final _pattern = RegExp(
-  r'(https?://[^\s<>"（）「」、。]+)|((?<![A-Za-z0-9_.-])@[A-Za-z0-9_.-]{1,32})',
-);
+final _pattern = RegExp(r'(https?://[^\s<>"（）「」、。]+)|((?<![A-Za-z0-9_.-])@[A-Za-z0-9_.-]{1,32})');
 
 List<BodySegment> parseBody(String body) {
   final out = <BodySegment>[];

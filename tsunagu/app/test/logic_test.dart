@@ -116,9 +116,20 @@ void main() {
         'require_ack': true,
         'acked_by_me': false,
         'ack_count': 2,
-        'reactions': [
-          {'key': 'like', 'count': 2, 'reacted_by_me': true},
+        'like_count': 2,
+        'liked_by_me': true,
+        'identity': 'real',
+        'images': [
+          {'id': 'abc', 'url': '/api/uploads/abc', 'width': 1200, 'height': 900},
         ],
+        'quote_of': {
+          'id': 3,
+          'kind': 'post',
+          'identity': 'anonymous',
+          'display_name': 'ぽんず',
+          'author': null,
+          'body': '元',
+        },
         'comment_count': 1,
         'created_at': '2026-11-20T01:23:45Z',
         'edited_at': null,
@@ -126,9 +137,13 @@ void main() {
         'can_delete': true,
       });
       expect(post.isAnnouncement, isTrue);
-      expect(post.author.affiliation, '営業部・主任');
-      expect(post.reaction('like')?.reactedByMe, isTrue);
-      expect(post.reaction('like')?.emoji, '👍');
+      expect(post.author?.affiliation, '営業部・主任');
+      expect(post.likedByMe, isTrue);
+      expect(post.likeCount, 2);
+      expect(post.images.single.aspectRatio, closeTo(4 / 3, 0.001));
+      expect(post.quoteOf?.shownName, 'ぽんず');
+      expect(post.quoteOf?.author, isNull);
+      expect(post.copyWith(likedByMe: false, likeCount: 1).likeCount, 1);
       expect(post.withCommentCount(2).commentCount, 2);
       expect(post.withCommentCount(-1).commentCount, 0);
     });

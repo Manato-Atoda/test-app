@@ -3,26 +3,22 @@ import 'package:material_ui/material_ui.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
 import '../state/app_scope.dart';
+import '../theme.dart';
 import '../utils/format.dart';
 import '../widgets/common.dart';
+import '../widgets/glass.dart';
+import '../widgets/like_button.dart';
+import '../widgets/mention_suggestions.dart';
 import '../widgets/post_card.dart';
 import '../widgets/rich_body.dart';
 import 'user_profile_screen.dart';
-import '../widgets/glass.dart';
 
 class PostDetailScreen extends StatefulWidget {
-  const PostDetailScreen({
-    super.key,
-    required this.postId,
-    this.initial,
-    this.onChanged,
-    this.onDeleted,
-  });
+  const PostDetailScreen({super.key, required this.postId, this.initial, this.callbacks = const PostCallbacks()});
 
   final int postId;
   final Post? initial;
-  final PostChanged? onChanged;
-  final PostDeleted? onDeleted;
+  final PostCallbacks callbacks;
 
   @override
   State<PostDetailScreen> createState() => _PostDetailScreenState();
@@ -36,12 +32,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   bool _loading = true;
   Object? _error;
   final _comment = TextEditingController();
+  Identity _identity = Identity.real;
   bool _sending = false;
 
   @override
   void initState() {
     super.initState();
     _post = widget.initial;
+    _comment.addListener(() => setState(() {}));
     _load();
   }
 
@@ -63,7 +61,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         _post = detail.post;
         _comments = detail.comments;
       });
-      widget.onChanged?.call(detail.post);
+      widget.callbacks.onChanged?.call(detail.post);
     } catch (e) {
       if (mounted) setState(() => _error = e);
     } finally {
@@ -72,28 +70,42 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   }
 
   void _postChanged(Post post) {
-    setState(() => _post = post);
-    widget.onChanged?.call(post);
+    if (post.id == _post?.id) setState(() => _post = post);
+    widget.callbacks.onChanged?.call(post);
   }
 
   void _postDeleted(int id) {
-    widget.onDeleted?.call(id);
-    Navigator.of(context).pop();
+    widget.callbacks.onDeleted?.call(id);
+    if (id == _post?.id) Navigator.of(context).pop();
   }
 
-  Future<void> _send() async {
+  PostCallbacks get _callbacks => PostCallbacks(
+    onChanged: _postChanged,
+    onDeleted: _postDeleted,
+    onInserted: widget.callbacks.onInserted,
+    onUnshared: widget.callbacks.onUnshared,
+  );
+
+  void _addComment(Comment c) {
+    setState(() => _comments = [..._comments, c]);
+    final p = _post;
+    if (p != null) _postChanged(p.withCommentCount(p.commentCount + 1));
+  }
+
+  Future<void> _send({int? quickIndex}) async {
     final text = _comment.text.trim();
-    if (text.isEmpty || _sending) return;
+    if ((quickIndex == null && text.isEmpty) || _sending) return;
     setState(() => _sending = true);
     try {
-      final c = await AppScope.read(context).api.addComment(widget.postId, text);
+      final c = await AppScope.read(context).api.addComment(
+        widget.postId,
+        body: quickIndex == null ? text : null,
+        identity: _identity,
+        quickIndex: quickIndex,
+      );
       if (!mounted) return;
-      _comment.clear();
-      setState(() => _comments = [..._comments, c]);
-      final p = _post;
-      if (p != null) {
-        _postChanged(p.withCommentCount(p.commentCount + 1));
-      }
+      if (quickIndex == null) _comment.clear();
+      _addComment(c);
     } catch (e) {
       if (mounted) showError(context, e);
     } finally {
@@ -101,10 +113,39 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     }
   }
 
+  void _replaceComment(Comment c) {
+    setState(() => _comments = [for (final x in _comments) x.id == c.id ? c : x]);
+  }
+
+  Future<void> _toggleCommentLike(Comment c) async {
+    final api = AppScope.read(context).api;
+    try {
+      _replaceComment(await api.setCommentLike(c.id, !c.likedByMe));
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
+  }
+
+  Future<void> _editComment(Comment c) async {
+    final body = await textInputDialog(
+      context,
+      title: 'コメントを編集',
+      initialValue: c.body,
+      maxLength: _maxComment,
+      maxLines: 6,
+    );
+    if (body == null || body == c.body || !mounted) return;
+    try {
+      _replaceComment(await AppScope.read(context).api.editComment(c.id, body));
+    } catch (e) {
+      if (mounted) showError(context, e);
+    }
+  }
+
   Future<void> _deleteComment(Comment c) async {
     final ok = await confirmDialog(
       context,
-      title: 'コメントを削除しますか？',
+      title: 'このコメントを削除しますか?',
       message: '削除したコメントは表示されなくなります。',
       confirmLabel: '削除',
       destructive: true,
@@ -142,8 +183,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final post = _post;
-    final theme = Theme.of(context);
-    final me = AppScope.of(context).me;
+    final p = context.m;
+    final state = AppScope.of(context);
 
     Widget body;
     if (post == null) {
@@ -162,35 +203,31 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
           children: [
             ContentWidth(
-              child: PostCard(
-                post: post,
-                inDetail: true,
-                onChanged: _postChanged,
-                onDeleted: _postDeleted,
-              ),
+              child: PostCard(post: post, inDetail: true, callbacks: _callbacks),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
             ContentWidth(
               child: Text(
                 'コメント（${_comments.length}）',
-                style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14.5),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
             if (_loading && _comments.isEmpty)
               const LoadingFooter()
             else if (_comments.isEmpty)
               ContentWidth(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  child: Text('まだコメントはありません。', style: theme.textTheme.bodyMedium),
+                  child: Text('まだコメントがありません', style: TextStyle(color: p.muted)),
                 ),
               ),
             for (final c in _comments)
               ContentWidth(
                 child: _CommentTile(
                   comment: c,
-                  isMine: c.author.id == me?.id,
+                  onLike: () => _toggleCommentLike(c),
+                  onEdit: () => _editComment(c),
                   onDelete: () => _deleteComment(c),
                   onReport: () => _reportComment(c),
                 ),
@@ -200,44 +237,76 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       );
     }
 
+    final features = state.company?.features ?? const CompanyFeatures();
+    final canSwitchIdentity = features.identityDepartment || features.identityAnonymous;
+    final quick = state.company?.quickComments ?? QuickComment.defaults;
+
     return Scaffold(
-      appBar: GlassAppBar(title: Text(post == null ? '投稿' : '#${post.channel.name}')),
+      appBar: GlassAppBar(
+        title: Text(post == null ? '投稿' : (post.isCommit ? 'COMMIT' : (post.channel?.label ?? '投稿'))),
+      ),
       body: SafeArea(
         child: Column(
           children: [
             Expanded(child: body),
             if (post != null)
               Material(
-                elevation: 3,
-                color: theme.colorScheme.surfaceContainer,
-                child: ContentWidth(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _comment,
-                            enabled: !_sending,
-                            minLines: 1,
-                            maxLines: 5,
-                            maxLength: _maxComment,
-                            onChanged: (_) => setState(() {}),
-                            decoration: const InputDecoration(
-                              hintText: 'コメントを書く',
-                              counterText: '',
-                              isDense: true,
+                color: p.surfaceElevated,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    border: Border(top: BorderSide(color: p.border)),
+                  ),
+                  child: ContentWidth(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            height: 34,
+                            child: ListView.separated(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: quick.length,
+                              separatorBuilder: (_, _) => const SizedBox(width: 6),
+                              itemBuilder: (context, i) => ActionChip(
+                                visualDensity: VisualDensity.compact,
+                                label: Text('${quick[i].emoji} ${quick[i].text}', style: const TextStyle(fontSize: 12)),
+                                onPressed: _sending ? null : () => _send(quickIndex: i),
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 4),
-                        IconButton.filled(
-                          tooltip: '送信',
-                          onPressed: _comment.text.trim().isEmpty || _sending ? null : _send,
-                          icon: const Icon(Icons.send),
-                        ),
-                      ],
+                          MentionSuggestions(controller: _comment),
+                          const SizedBox(height: 6),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              if (canSwitchIdentity)
+                                _IdentityPicker(value: _identity, onChanged: (v) => setState(() => _identity = v)),
+                              Expanded(
+                                child: TextField(
+                                  controller: _comment,
+                                  enabled: !_sending,
+                                  minLines: 1,
+                                  maxLines: 5,
+                                  maxLength: _maxComment,
+                                  decoration: const InputDecoration(
+                                    hintText: 'コメントを書く... (@ でメンション)',
+                                    counterText: '',
+                                    isDense: true,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              IconButton.filled(
+                                tooltip: '送信',
+                                style: IconButton.styleFrom(backgroundColor: p.accent),
+                                onPressed: _comment.text.trim().isEmpty || _sending ? null : _send,
+                                icon: const Icon(Icons.arrow_upward_rounded),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -249,89 +318,186 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   }
 }
 
-class _CommentTile extends StatelessWidget {
+/// コメント欄の発信者切り替え（小さなボタン）。
+class _IdentityPicker extends StatelessWidget {
+  const _IdentityPicker({required this.value, required this.onChanged});
+
+  final Identity value;
+  final ValueChanged<Identity> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = AppScope.of(context);
+    final p = context.m;
+    return PopupMenuButton<Identity>(
+      tooltip: '発信者',
+      initialValue: value,
+      onSelected: (v) {
+        final reason = state.identityUnavailableReason(v);
+        if (reason != null) {
+          showInfo(context, reason);
+          return;
+        }
+        onChanged(v);
+      },
+      itemBuilder: (_) => [
+        for (final id in Identity.values)
+          PopupMenuItem(
+            value: id,
+            enabled: true,
+            child: Text(
+              '${id.label}（${state.identityUnavailableReason(id) == null ? state.identityPreview(id) : '未設定'}）',
+              style: TextStyle(color: state.identityUnavailableReason(id) == null ? null : p.muted),
+            ),
+          ),
+      ],
+      child: Container(
+        margin: const EdgeInsets.only(right: 6, bottom: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(color: p.accentSoft, borderRadius: BorderRadius.circular(999)),
+        child: Text(
+          value.label,
+          style: TextStyle(color: p.accent, fontWeight: FontWeight.w700, fontSize: 12),
+        ),
+      ),
+    );
+  }
+}
+
+class _CommentTile extends StatefulWidget {
   const _CommentTile({
     required this.comment,
-    required this.isMine,
+    required this.onLike,
+    required this.onEdit,
     required this.onDelete,
     required this.onReport,
   });
 
   final Comment comment;
-  final bool isMine;
+  final VoidCallback onLike;
+  final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback onReport;
 
   @override
+  State<_CommentTile> createState() => _CommentTileState();
+}
+
+class _CommentTileState extends State<_CommentTile> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    final c = widget.comment;
+    final p = context.m;
     final items = <PopupMenuEntry<String>>[
-      if (comment.canDelete) const PopupMenuItem(value: 'delete', child: Text('削除')),
-      if (!isMine && !comment.hidden) const PopupMenuItem(value: 'report', child: Text('管理者に通報')),
+      if (c.canEdit && !c.hidden && !c.isQuick) const PopupMenuItem(value: 'edit', child: Text('編集')),
+      if (c.canDelete) const PopupMenuItem(value: 'delete', child: Text('削除')),
+      if (!c.isMine && !c.hidden) const PopupMenuItem(value: 'report', child: Text('管理者に通報')),
     ];
+    final long = c.body.length > 160 || '\n'.allMatches(c.body).length > 4;
+    final tag = identityTag(context, c.identity);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          InkWell(
-            customBorder: const CircleBorder(),
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => UserProfileScreen(userId: comment.author.id)),
-            ),
-            child: UserAvatar(user: comment.author, size: 32),
+          GestureDetector(
+            onTap: c.identity == Identity.real && c.author != null
+                ? () =>
+                      Navigator.of(context)
+                          .push(MaterialPageRoute<void>(builder: (_) => UserProfileScreen(userId: c.author!.id)))
+                : null,
+            child: AuthorAvatar(item: c, size: 32),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Container(
-              padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+              padding: const EdgeInsets.fromLTRB(14, 10, 4, 6),
               decoration: BoxDecoration(
-                color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
-                borderRadius: BorderRadius.circular(12),
+                color: p.surfaceElevated,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: p.border),
               ),
-              child: Row(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text.rich(
-                          TextSpan(
-                            children: [
-                              TextSpan(
-                                text: displayNameWithStatus(comment.author),
-                                style: const TextStyle(fontWeight: FontWeight.w700),
-                              ),
-                              TextSpan(
-                                text: '  ${relativeTime(comment.createdAt)}',
-                                style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
-                              ),
-                            ],
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          c.author != null && c.identity == Identity.real
+                              ? displayNameWithStatus(c.author!)
+                              : c.shownName,
+                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5),
+                        ),
+                      ),
+                      if (tag != null) ...[const SizedBox(width: 6), tag],
+                      const SizedBox(width: 6),
+                      Text(relativeTime(c.createdAt), style: TextStyle(color: p.muted, fontSize: 11.5)),
+                      if (c.editedAt != null) Text(' · 編集済み', style: TextStyle(color: p.muted, fontSize: 11.5)),
+                      const Spacer(),
+                      if (items.isNotEmpty)
+                        SizedBox(
+                          width: 28,
+                          height: 24,
+                          child: PopupMenuButton<String>(
+                            padding: EdgeInsets.zero,
+                            tooltip: 'コメントを編集・削除',
+                            iconSize: 16,
+                            icon: Icon(Icons.more_horiz, color: p.muted),
+                            itemBuilder: (_) => items,
+                            onSelected: (v) {
+                              switch (v) {
+                                case 'edit':
+                                  widget.onEdit();
+                                case 'delete':
+                                  widget.onDelete();
+                                case 'report':
+                                  widget.onReport();
+                              }
+                            },
                           ),
                         ),
-                        const SizedBox(height: 2),
-                        if (comment.hidden)
-                          Text(
-                            'このコメントは管理者により非表示になりました。',
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          )
-                        else
-                          RichBody(comment.body, style: theme.textTheme.bodyMedium),
-                      ],
-                    ),
+                    ],
                   ),
-                  if (items.isNotEmpty)
-                    PopupMenuButton<String>(
-                      tooltip: 'メニュー',
-                      iconSize: 18,
-                      icon: const Icon(Icons.more_vert),
-                      itemBuilder: (_) => items,
-                      onSelected: (v) => v == 'delete' ? onDelete() : onReport(),
+                  const SizedBox(height: 4),
+                  if (c.hidden)
+                    Text(
+                      'このコメントは管理者により非表示になりました。',
+                      style: TextStyle(color: p.muted, fontStyle: FontStyle.italic, fontSize: 13.5),
+                    )
+                  else if (c.isQuick)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(color: p.accentSoft, borderRadius: BorderRadius.circular(999)),
+                      child: Text(
+                        c.body,
+                        style: TextStyle(color: p.accent, fontWeight: FontWeight.w700, fontSize: 13),
+                      ),
+                    )
+                  else ...[
+                    RichBody(
+                      c.body,
+                      maxLines: long && !_expanded ? 4 : null,
+                      style: const TextStyle(fontSize: 14, height: 1.5),
+                    ),
+                    if (long)
+                      GestureDetector(
+                        onTap: () => setState(() => _expanded = !_expanded),
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            _expanded ? '折りたたむ' : '続きを読む',
+                            style: TextStyle(color: p.accent, fontSize: 12.5, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ),
+                  ],
+                  if (!c.hidden)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: LikeButton(liked: c.likedByMe, count: c.likeCount, onToggle: widget.onLike, compact: true),
                     ),
                 ],
               ),

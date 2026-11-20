@@ -64,16 +64,11 @@ class _PasswordChangeScreenState extends State<PasswordChangeScreen> {
     });
     final state = AppScope.read(context);
     try {
-      await state.changePassword(
-        currentPassword: _needsCurrent ? _current.text : null,
-        newPassword: _new.text,
-      );
+      await state.changePassword(currentPassword: _needsCurrent ? _current.text : null, newPassword: _new.text);
       if (widget.voluntary && mounted) {
         final messenger = ScaffoldMessenger.of(context);
         Navigator.of(context).pop();
-        messenger.showSnackBar(
-          const SnackBar(content: Text('パスワードを変更しました。ほかの端末はログアウトされました。')),
-        );
+        messenger.showSnackBar(const SnackBar(content: Text('パスワードを変更しました。ほかの端末はログアウトされました。')));
       }
     } on ApiException catch (e) {
       if (mounted) {
@@ -99,10 +94,7 @@ class _PasswordChangeScreenState extends State<PasswordChangeScreen> {
       appBar: GlassAppBar(
         title: Text(widget.voluntary ? 'パスワードの変更' : 'パスワードの設定'),
         automaticallyImplyLeading: widget.voluntary,
-        actions: [
-          if (!widget.voluntary)
-            GlassButton(label: 'ログアウト', onPressed: _busy ? null : () => state.logout()),
-        ],
+        actions: [if (!widget.voluntary) GlassButton(label: 'ログアウト', onPressed: _busy ? null : () => state.logout())],
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -128,10 +120,7 @@ class _PasswordChangeScreenState extends State<PasswordChangeScreen> {
                   Container(
                     margin: const EdgeInsets.only(bottom: 16),
                     padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: scheme.errorContainer,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                    decoration: BoxDecoration(color: scheme.errorContainer, borderRadius: BorderRadius.circular(10)),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -185,10 +174,7 @@ class _PasswordChangeScreenState extends State<PasswordChangeScreen> {
                   onSubmitted: (_) {
                     if (ready && !_busy) _submit();
                   },
-                  decoration: const InputDecoration(
-                    labelText: '新しいパスワード（確認）',
-                    prefixIcon: Icon(Icons.lock_outline),
-                  ),
+                  decoration: const InputDecoration(labelText: '新しいパスワード（確認）', prefixIcon: Icon(Icons.lock_outline)),
                 ),
                 const SizedBox(height: 16),
                 Card(

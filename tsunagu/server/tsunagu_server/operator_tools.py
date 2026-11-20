@@ -8,14 +8,14 @@ from typing import Dict, List, Optional, Tuple
 from . import passwords
 from .accounts import COMPANY_CODE_RE, insert_user, issue_credentials, normalize_company_code, validate_user_fields
 from .config import Config
-from .db import DEFAULT_SETTINGS, audit, now
+from .db import DEFAULT_SETTINGS, audit, ensure_company_defaults, now
 from .pdf import AccountNotice
 from .web import ApiError
 
 DEFAULT_CHANNELS = [
-    # name, description, visibility, company_wide, post_policy, sort
-    ("お知らせ", "会社からの公式なお知らせ（管理者のみ投稿）", "open", 1, "admins", 0),
-    ("全社", "全員が参加する雑談・共有のチャンネル", "open", 1, "everyone", 1),
+    # name, emoji, description, visibility, company_wide, post_policy, sort
+    ("お知らせ", "📢", "会社からの公式なお知らせ（管理者のみ投稿）", "open", 1, "admins", 0),
+    ("全社", "🏢", "全員が参加する雑談・共有のチャンネル", "open", 1, "everyone", 1),
 ]
 
 
@@ -32,10 +32,11 @@ def create_company(db: sqlite3.Connection, cfg: Config, *, code: str, name: str,
     cur = db.execute("INSERT INTO companies (code, name, settings, created_at) VALUES (?, ?, ?, ?)",
                      (code, name.strip(), json.dumps(DEFAULT_SETTINGS, ensure_ascii=False), now()))
     company_id = int(cur.lastrowid)
-    for ch_name, desc, visibility, wide, policy, sort in DEFAULT_CHANNELS:
-        db.execute("INSERT INTO channels (company_id, name, description, visibility, company_wide, post_policy,"
-                   " sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                   (company_id, ch_name, desc, visibility, wide, policy, sort, now()))
+    for ch_name, emoji, desc, visibility, wide, policy, sort in DEFAULT_CHANNELS:
+        db.execute("INSERT INTO channels (company_id, name, emoji, description, visibility, company_wide, post_policy,"
+                   " sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                   (company_id, ch_name, emoji, desc, visibility, wide, policy, sort, now()))
+    ensure_company_defaults(db, company_id)
     fields = validate_user_fields(dict(admin, role="admin"))
     admin_id = insert_user(db, company_id, fields, None)
     audit(db, company_id=company_id, actor_id=None, action="company.created", detail={"code": code, "by": "cli"})
@@ -85,43 +86,69 @@ def seed_demo(db: sqlite3.Connection, cfg: Config) -> Optional[int]:
                    " credentials_issued_at = ?, credentials_issued_via = 'cli' WHERE id = ?",
                    (demo_hash, ts + 30 * 86400, ts, ids[code]))
 
+    # 匿名で発信するためのあだ名（誰のあだ名かは、本人と管理者以外にはわからない）
+    for code, nickname in (("E0002", "ぽんず"), ("E0003", "みかん"), ("E0004", "しお")):
+        db.execute("UPDATE users SET nickname = ? WHERE id = ?", (nickname, ids[code]))
+
     channels = {}
-    for ch_name, desc, visibility, members in (
-            ("開発部", "開発部の連絡・相談", "open", ["E0002", "E0004"]),
-            ("営業部", "営業部の共有", "open", ["E0003"]),
-            ("雑談", "業務以外の話題もどうぞ", "open", ["E0001", "E0002", "E0003", "E0004"]),
-            ("経営企画", "経営企画メンバー限定", "private", ["E0001"])):
-        cur = db.execute("INSERT INTO channels (company_id, name, description, visibility, created_by, created_at)"
-                         " VALUES (?, ?, ?, ?, ?, ?)", (company_id, ch_name, desc, visibility, admin_id, ts))
+    for ch_name, emoji, desc, visibility, members in (
+            ("開発部", "💻", "開発部の連絡・相談", "open", ["E0002", "E0004"]),
+            ("営業部", "💼", "営業部の共有", "open", ["E0003"]),
+            ("雑談", "☕", "業務以外の話題もどうぞ", "open", ["E0001", "E0002", "E0003", "E0004"]),
+            ("経営企画", "🔒", "経営企画メンバー限定", "private", ["E0001"])):
+        cur = db.execute("INSERT INTO channels (company_id, name, emoji, description, visibility, created_by,"
+                         " created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                         (company_id, ch_name, emoji, desc, visibility, admin_id, ts))
         channels[ch_name] = cur.lastrowid
         for code in members:
             db.execute("INSERT INTO channel_members (channel_id, user_id, joined_at) VALUES (?, ?, ?)",
                        (cur.lastrowid, ids[code], ts))
-    for row in db.execute("SELECT id, name FROM channels WHERE company_id = ? AND company_wide = 1", (company_id,)):
-        channels[row["name"]] = row["id"]
+    for row in db.execute("SELECT id, name, system_kind FROM channels WHERE company_id = ? AND company_wide = 1",
+                          (company_id,)):
+        channels["COMMIT" if row["system_kind"] == "commit" else row["name"]] = row["id"]
 
-    def post(channel: str, author: str, body: str, minutes_ago: int, kind: str = "post", ack: bool = False) -> int:
-        cur = db.execute("INSERT INTO posts (company_id, channel_id, author_id, body, kind, require_ack, created_at)"
-                         " VALUES (?, ?, ?, ?, ?, ?, ?)",
-                         (company_id, channels[channel], ids[author], body, kind, int(ack), ts - minutes_ago * 60))
+    def post(channel: str, author: str, body: str, minutes_ago: int, kind: str = "post", ack: bool = False,
+             identity: str = "real", display_name: Optional[str] = None) -> int:
+        cur = db.execute("INSERT INTO posts (company_id, channel_id, author_id, body, kind, require_ack, identity,"
+                         " display_name, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                         (company_id, channels[channel], ids[author], body, kind, int(ack), identity, display_name,
+                          ts - minutes_ago * 60))
         return int(cur.lastrowid)
 
     p1 = post("お知らせ", "E0001",
-              "【必読】社内SNS「つなぐ」の利用を開始します\n\n本日から、部署をまたいだ連絡や情報共有に「つなぐ」を使います。"
+              "【必読】社内SNS「M」の利用を開始します\n\n本日から、部署をまたいだ連絡や情報共有に「M」を使います。"
               "最初に「社内SNS 利用ガイドライン」を確認し、この投稿の「確認しました」を押してください。", 300,
               kind="announcement", ack=True)
     p2 = post("全社", "E0003", "今月の営業目標を達成しました！ご協力いただいた皆さん、ありがとうございました。", 180)
     p3 = post("開発部", "E0002",
               "@E0004 新しいログイン画面のデザイン案、確認しました。パスキーのボタンの位置だけ相談させてください。", 90)
     post("雑談", "E0004", "1階の自販機に新しいお茶が入っていました🍵", 30)
+    post("雑談", "E0002", "会議室の予約がいつも埋まっていて困っています。みなさんどうしてますか…？", 25,
+         identity="anonymous", display_name="ぽんず")
     post("経営企画", "E0001", "来期の計画は来週の会議で共有します（このチャンネルはメンバー限定です）。", 20)
+    c1 = post("COMMIT", "E0003", "今週中に新規のお客様へのアポを3件取ります。", 240, kind="commit")
+    post("COMMIT", "E0002", "金曜までにログイン画面の改善をリリースします。", 120, kind="commit")
     db.execute("INSERT INTO comments (company_id, post_id, author_id, body, created_at) VALUES (?, ?, ?, ?, ?)",
                (company_id, p3, ids["E0004"], "ありがとうございます。明日の午前に15分ほどお時間ください！", ts - 60 * 60))
-    for post_id, code, key in ((p2, "E0001", "clap"), (p2, "E0002", "celebrate"), (p2, "E0004", "clap"),
-                               (p3, "E0004", "eyes"), (p1, "E0002", "like")):
-        db.execute("INSERT INTO reactions (post_id, user_id, reaction, created_at) VALUES (?, ?, ?, ?)",
-                   (post_id, ids[code], key, ts))
+    for post_id, code in ((p2, "E0001"), (p2, "E0002"), (p2, "E0004"), (p3, "E0004"), (p1, "E0002"), (c1, "E0001")):
+        db.execute("INSERT INTO likes (post_id, user_id, created_at) VALUES (?, ?, ?)", (post_id, ids[code], ts))
     db.execute("INSERT INTO acks (post_id, user_id, created_at) VALUES (?, ?, ?)", (p1, ids["E0002"], ts))
     db.execute("INSERT INTO notifications (company_id, user_id, type, actor_id, post_id, created_at)"
                " VALUES (?, ?, 'mention', ?, ?, ?)", (company_id, ids["E0004"], ids["E0002"], p3, ts - 90 * 60))
+
+    # わからんの森
+    cats = {r["name"]: r["id"] for r in db.execute("SELECT id, name FROM forest_categories WHERE company_id = ?",
+                                                    (company_id,))}
+    q1 = db.execute("INSERT INTO questions (company_id, category_id, author_id, title, body, created_at)"
+                    " VALUES (?, ?, ?, ?, ?, ?)",
+                    (company_id, cats["エンジニア"], ids["E0004"], "社内の Wi-Fi のパスワードはどこで確認できますか？",
+                     "来客用ではなく、社員用のネットワークです。", ts - 26 * 3600)).lastrowid
+    a1 = db.execute("INSERT INTO answers (company_id, question_id, author_id, body, created_at) VALUES (?, ?, ?, ?, ?)",
+                    (company_id, q1, ids["E0002"], "総務部の掲示板（社内ポータル）に載っています。わからなければ総務部へ！",
+                     ts - 25 * 3600)).lastrowid
+    db.execute("INSERT INTO answer_likes (answer_id, user_id, created_at) VALUES (?, ?, ?)", (a1, ids["E0004"], ts))
+    db.execute("INSERT INTO questions (company_id, category_id, author_id, title, body, identity, display_name,"
+               " created_at) VALUES (?, ?, ?, ?, ?, 'anonymous', 'みかん', ?)",
+               (company_id, cats["バックオフィス"], ids["E0003"], "経費精算の締め日はいつですか？",
+                "月末に出張が重なりそうで、どこまで今月分にできるか知りたいです。", ts - 30 * 3600))
     return company_id

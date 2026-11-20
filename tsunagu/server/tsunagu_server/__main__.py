@@ -20,13 +20,14 @@ from .web import ApiError
 
 
 def main(argv: list = None) -> int:
-    parser = argparse.ArgumentParser(prog="tsunagu_server", description="社内SNS「つなぐ」サーバー")
+    parser = argparse.ArgumentParser(prog="tsunagu_server", description="社内SNS「M」サーバー")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_serve = sub.add_parser("serve", help="サーバーを起動")
     p_serve.add_argument("--host", default="127.0.0.1")
     p_serve.add_argument("--port", type=int, default=8790)
     p_serve.add_argument("--seed-demo", action="store_true", help="デモ企業がなければ作ってから起動（開発用）")
+    p_serve.add_argument("--db", help="データベースのファイル（既定: server/var/tsunagu.db）")
 
     p_company = sub.add_parser("create-company", help="企業と最初の管理者を作成（運営者用）")
     p_company.add_argument("--code", required=True, help="企業コード（半角英数字3〜16文字）")
@@ -41,6 +42,8 @@ def main(argv: list = None) -> int:
 
     args = parser.parse_args(argv)
     cfg = load_config()
+    if getattr(args, "db", None):
+        cfg.db_path = os.path.abspath(args.db)
     init_db(cfg.db_path)
 
     if args.command == "serve":

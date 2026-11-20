@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from . import passwords
 from .config import Config
-from .db import audit, company_settings, iso, jp_datetime, now
+from .db import QUICK_COMMENTS, audit, company_settings, iso, jp_datetime, now
 from .mailer import send_mail
 from .pdf import AccountNotice
 from .web import ApiError
@@ -29,6 +29,10 @@ def hash_token(token: str) -> str:
 
 # ------------------------------------------------------------------ 表示用
 
+def upload_url(upload_id: Optional[str]) -> Optional[str]:
+    return "/api/uploads/%s" % upload_id if upload_id else None
+
+
 def user_summary(u: sqlite3.Row) -> Dict[str, Any]:
     return {
         "id": u["id"],
@@ -37,6 +41,7 @@ def user_summary(u: sqlite3.Row) -> Dict[str, Any]:
         "department": u["department"],
         "title": u["title"],
         "avatar_color": u["avatar_color"],
+        "avatar_url": upload_url(u["avatar_upload"]),
         "role": u["role"],
         "status": u["status"],
     }
@@ -44,14 +49,53 @@ def user_summary(u: sqlite3.Row) -> Dict[str, Any]:
 
 def user_profile(u: sqlite3.Row) -> Dict[str, Any]:
     data = user_summary(u)
-    data.update({"email": u["email"], "bio": u["bio"]})
+    data.update({"email": u["email"], "bio": u["bio"], "cover_url": upload_url(u["cover_upload"])})
     return data
+
+
+IDENTITIES = ("real", "department", "anonymous")
+
+
+def resolve_identity(db: sqlite3.Connection, user: sqlite3.Row, company: sqlite3.Row,
+                     value: Any) -> Tuple[str, Optional[str]]:
+    """発信者の指定をチェックし、(identity, 表示名) を返す。表示名は投稿した時点のものを保存する。"""
+    identity = value if isinstance(value, str) and value else "real"
+    if identity not in IDENTITIES:
+        raise ApiError(400, "invalid_field", "発信者の指定が正しくありません", field="identity")
+    if identity == "real":
+        return "real", None
+    settings = company_settings(company)
+    if identity == "department":
+        if not settings.get("identity_department_enabled"):
+            raise ApiError(400, "identity_unavailable", "この会社では部署名での発信は使えません")
+        if not (user["department"] or "").strip():
+            raise ApiError(400, "identity_unavailable", "部署が登録されていないため、部署名では発信できません")
+        return "department", user["department"]
+    if not settings.get("identity_anonymous_enabled"):
+        raise ApiError(400, "identity_unavailable", "この会社では匿名での発信は使えません")
+    if not (user["nickname"] or "").strip():
+        raise ApiError(400, "identity_unavailable", "プロフィールで匿名表示名（あだ名）を設定してください")
+    return "anonymous", user["nickname"]
+
+
+def author_fields(row: sqlite3.Row, author: Optional[sqlite3.Row], viewer_id: int,
+                  author_key: str = "author_id") -> Dict[str, Any]:
+    """投稿・コメントなどの発信者の表示。実名以外は本人がわからない形にする。"""
+    identity = row["identity"] or "real"
+    real = identity == "real"
+    return {
+        "author": user_summary(author) if real and author is not None else None,
+        "identity": identity,
+        "display_name": None if real else row["display_name"],
+        "is_mine": row[author_key] == viewer_id,
+    }
 
 
 def me_json(db: sqlite3.Connection, u: sqlite3.Row) -> Dict[str, Any]:
     data = user_profile(u)
     count = db.execute("SELECT COUNT(*) FROM passkeys WHERE user_id = ?", (u["id"],)).fetchone()[0]
     data.update({
+        "nickname": u["nickname"],
         "must_change_password": bool(u["must_change_password"]),
         "passkey_count": count,
         "last_login_at": iso(u["last_login_at"]),
@@ -68,6 +112,12 @@ def company_json(c: sqlite3.Row) -> Dict[str, Any]:
         "name": c["name"],
         "guidelines": settings["guidelines"],
         "guidelines_version": settings["guidelines_version"],
+        "features": {
+            "identity_department": bool(settings["identity_department_enabled"]),
+            "identity_anonymous": bool(settings["identity_anonymous_enabled"]),
+            "watermark": bool(settings["watermark_mobile"]),
+        },
+        "quick_comments": QUICK_COMMENTS,
     }
 
 
@@ -273,7 +323,7 @@ def issue_credentials(db: sqlite3.Connection, cfg: Config, company: sqlite3.Row,
 
 def send_credentials_mail(db: sqlite3.Connection, cfg: Config, company_id: int, notice: AccountNotice) -> bool:
     assert notice.email
-    subject = "【つなぐ】アカウント発行のお知らせ（%s）" % notice.company_name
+    subject = "【M】アカウント発行のお知らせ（%s）" % notice.company_name
     return send_mail(db, cfg, company_id=company_id, to=notice.email, subject=subject,
                      body=_mail_text(notice, notice.temporary_password),
                      redacted_body=_mail_text(notice, "（送信履歴には表示しません）"))

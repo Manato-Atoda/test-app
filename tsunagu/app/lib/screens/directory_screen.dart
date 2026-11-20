@@ -81,15 +81,12 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
             child: ListTile(
               leading: UserAvatar(user: u),
               title: Text(u.displayName),
-              subtitle: Text(
-                [if (u.affiliation.isNotEmpty) u.affiliation, u.employeeCode].join(' · '),
-              ),
+              subtitle: Text([if (u.affiliation.isNotEmpty) u.affiliation, u.employeeCode].join(' · ')),
               trailing: u.isAdmin
                   ? Text('管理者', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.primary))
                   : null,
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => UserProfileScreen(userId: u.id)),
-              ),
+              onTap: () =>
+                  Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => UserProfileScreen(userId: u.id))),
             ),
           );
         },

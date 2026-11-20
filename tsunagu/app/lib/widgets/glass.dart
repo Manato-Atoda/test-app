@@ -5,6 +5,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
+import 'brand.dart';
+
 /// iOS のリキッドグラス（iOS 26 以降）を使えるか。
 ///
 /// 使えるのは iOS 26 以降で、設定の「透明度を下げる」がオフのとき。
@@ -61,6 +63,7 @@ class GlassTabItem {
     required this.symbol,
     required this.selectedSymbol,
     this.badge = 0,
+    this.dot = false,
   });
 
   final String label;
@@ -74,17 +77,30 @@ class GlassTabItem {
   /// 未読の数など（0 で非表示）
   final int badge;
 
-  String get badgeText => badge <= 0 ? '' : (badge > 99 ? '99+' : '$badge');
+  /// 数のない新着の印（赤い点）
+  final bool dot;
+
+  /// ネイティブに送るバッジ。'' はなし、'dot' は点だけ。
+  String get badgeText => badge > 0 ? (badge > 99 ? '99+' : '$badge') : (dot ? 'dot' : '');
 }
 
 /// iOS 本物の UITabBar。選択の「レンズ」が滑る動き・押したときの反応・
 /// 指でなぞって切り替える操作は、すべて iOS 標準の動きになる。
 class GlassTabBar extends StatefulWidget {
-  const GlassTabBar({super.key, required this.items, required this.selectedIndex, required this.onSelected});
+  const GlassTabBar({
+    super.key,
+    required this.items,
+    required this.selectedIndex,
+    required this.onSelected,
+    this.momentaryIndexes = const {},
+  });
 
   final List<GlassTabItem> items;
   final int selectedIndex;
   final ValueChanged<int> onSelected;
+
+  /// 押しても選択を移さないタブ（メニューを開くだけ、など）。
+  final Set<int> momentaryIndexes;
 
   @override
   State<GlassTabBar> createState() => _GlassTabBarState();
@@ -96,7 +112,14 @@ class _GlassTabBarState extends State<GlassTabBar> {
   void _onCreated(int id) {
     final channel = MethodChannel('tsunagu/tabbar/$id');
     channel.setMethodCallHandler((call) async {
-      if (call.method == 'onSelect' && call.arguments is int) widget.onSelected(call.arguments as int);
+      if (call.method == 'onSelect' && call.arguments is int) {
+        final index = call.arguments as int;
+        widget.onSelected(index);
+        if (widget.momentaryIndexes.contains(index)) {
+          // 選択はもとのタブに戻す（ネイティブ側はすでに押したタブを選んでいる）
+          channel.invokeMethod<void>('select', widget.selectedIndex);
+        }
+      }
     });
     _channel = channel;
   }
@@ -150,8 +173,7 @@ class GlassTabBarInset extends InheritedWidget {
 
   final double height;
 
-  static double of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<GlassTabBarInset>()?.height ?? 0;
+  static double of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<GlassTabBarInset>()?.height ?? 0;
 
   @override
   bool updateShouldNotify(GlassTabBarInset oldWidget) => oldWidget.height != height;
@@ -278,35 +300,32 @@ class GlassButton extends StatelessWidget {
   }
 }
 
-/// 「投稿」ボタン（右下）。リキッドグラスでは色つきのガラス、使えないときは FloatingActionButton。
+/// 「投稿」ボタン（右下）。リキッドグラスでは色つきのガラス、使えないときは Galaxia のグラデーションのカプセル。
 class GlassComposeButton extends StatelessWidget {
-  const GlassComposeButton({super.key, required this.onPressed});
+  const GlassComposeButton({super.key, required this.onPressed, this.label = '投稿', this.symbol = 'square.and.pencil'});
 
   final VoidCallback onPressed;
+  final String label;
+  final String symbol;
 
   @override
   Widget build(BuildContext context) {
-    return GlassBuilder(
-      builder: (context, glass) => glass
-          ? Padding(
-              // 右下のボタンの位置はホームバーの高さしか考えないので、ガラスのタブバーのぶん持ち上げる
-              padding: EdgeInsets.only(
-                bottom: GlassTabBarInset.of(context) > 0 ? GlassTabBarInset.of(context) + 30 : 0,
-              ),
-              child: GlassButton(
-                label: '投稿',
-                symbol: 'square.and.pencil',
+    // 右下のボタンの位置はホームバーの高さしか考えないので、タブバーのぶん持ち上げる
+    final inset = GlassTabBarInset.of(context);
+    return Padding(
+      padding: EdgeInsets.only(bottom: inset > 0 ? inset + 30 : 0),
+      child: GlassBuilder(
+        builder: (context, glass) => glass
+            ? GlassButton(
+                label: label,
+                symbol: symbol,
                 icon: Icons.edit_outlined,
                 style: GlassButtonStyle.prominent,
                 height: 52,
                 onPressed: onPressed,
-              ),
-            )
-          : FloatingActionButton.extended(
-              onPressed: onPressed,
-              icon: const Icon(Icons.edit_outlined),
-              label: const Text('投稿'),
-            ),
+              )
+            : GradientButton(label: label, icon: Icons.edit_outlined, height: 52, onPressed: onPressed),
+      ),
     );
   }
 }
@@ -315,7 +334,10 @@ class GlassComposeButton extends StatelessWidget {
 
 /// 上部バーの背景。iOS 26 の「スクロールエッジ効果」と同じく、下を流れる内容をぼかす。
 class ScrollEdgeBackground extends StatelessWidget {
-  const ScrollEdgeBackground({super.key});
+  const ScrollEdgeBackground({super.key, this.border = false});
+
+  /// 下端に細い線を引く（Galaxia の固定ヘッダー）
+  final bool border;
 
   @override
   Widget build(BuildContext context) {
@@ -323,7 +345,14 @@ class ScrollEdgeBackground extends StatelessWidget {
     return ClipRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: ColoredBox(color: color.withValues(alpha: 0.72)),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.78),
+            border: border
+                ? Border(bottom: BorderSide(color: Theme.of(context).dividerColor.withValues(alpha: 0.6)))
+                : null,
+          ),
+        ),
       ),
     );
   }
@@ -355,9 +384,14 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
         if (!glass) {
           return AppBar(
             title: title,
-            actions: actions,
+            actions: [...actions, const SizedBox(width: 4)],
             automaticallyImplyLeading: automaticallyImplyLeading,
             bottom: bottom,
+            backgroundColor: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
+            scrolledUnderElevation: 0,
+            elevation: 0,
+            flexibleSpace: const SizedBox.expand(child: ScrollEdgeBackground(border: true)),
           );
         }
         final route = ModalRoute.of(context);
@@ -402,6 +436,7 @@ class GlassScaffold extends StatelessWidget {
     this.floatingActionButton,
     this.bottomNavigationBar,
     this.scrollUnderBars = false,
+    this.aurora = true,
   });
 
   final PreferredSizeWidget? appBar;
@@ -410,17 +445,19 @@ class GlassScaffold extends StatelessWidget {
   final Widget? bottomNavigationBar;
   final bool scrollUnderBars;
 
+  /// Galaxia のオーロラの背景を敷く
+  final bool aurora;
+
   @override
   Widget build(BuildContext context) {
-    return GlassBuilder(
-      builder: (context, glass) => Scaffold(
-        appBar: appBar,
-        body: body,
-        floatingActionButton: floatingActionButton,
-        bottomNavigationBar: bottomNavigationBar,
-        extendBodyBehindAppBar: glass && scrollUnderBars,
-        extendBody: glass && scrollUnderBars,
-      ),
+    // 上下のバーは半透明（ぼかし）なので、内容はバーの下まで流す（一覧は scrollPadding で余白をとる）
+    return Scaffold(
+      appBar: appBar,
+      body: aurora ? AuroraBackground(child: body) : body,
+      floatingActionButton: floatingActionButton,
+      bottomNavigationBar: bottomNavigationBar,
+      extendBodyBehindAppBar: scrollUnderBars,
+      extendBody: scrollUnderBars,
     );
   }
 }

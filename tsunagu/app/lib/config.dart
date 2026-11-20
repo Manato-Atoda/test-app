@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 class AppConfig {
   AppConfig._();
 
-  static const appName = 'つなぐ';
+  static const appName = 'M';
 
   /// `--dart-define=TSUNAGU_API=https://sns.example.co.jp` で接続先を固定できる。
   static const _definedServer = String.fromEnvironment('TSUNAGU_API');
@@ -75,7 +75,5 @@ class AppConfig {
   }
 
   static bool get isDesktopLoopbackAuth =>
-      !kIsWeb &&
-      (defaultTargetPlatform == TargetPlatform.windows ||
-          defaultTargetPlatform == TargetPlatform.linux);
+      !kIsWeb && (defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.linux);
 }

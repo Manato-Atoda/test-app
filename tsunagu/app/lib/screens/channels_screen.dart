@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import '../api/api_client.dart';
 import '../api/models.dart';
 import '../state/app_scope.dart';
+import '../widgets/brand.dart';
 import '../widgets/common.dart';
 import '../widgets/feed_view.dart';
 import 'compose_screen.dart';
@@ -48,7 +49,9 @@ class _ChannelsScreenState extends State<ChannelsScreen> {
 
   Future<void> _open(Channel c) async {
     await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => ChannelFeedScreen(channel: c, onChanged: _replace)),
+      MaterialPageRoute<void>(
+        builder: (_) => ChannelFeedScreen(channel: c, onChanged: _replace),
+      ),
     );
   }
 
@@ -86,7 +89,11 @@ class _ChannelsScreenState extends State<ChannelsScreen> {
         ),
       );
     }
-    return GlassScaffold(scrollUnderBars: true, appBar: const GlassAppBar(title: Text('チャンネル')), body: body);
+    return GlassScaffold(
+      scrollUnderBars: true,
+      appBar: const GlassAppBar(title: Text('チャンネル')),
+      body: body,
+    );
   }
 }
 
@@ -108,12 +115,18 @@ class _Section extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
             child: Text(title, style: theme.textTheme.titleSmall?.copyWith(color: theme.colorScheme.primary)),
           ),
-          if (channels.isEmpty)
-            const ListTile(title: Text('ありません')),
+          if (channels.isEmpty) const ListTile(title: Text('ありません')),
           for (final c in channels)
             ListTile(
-              leading: Icon(c.isPrivate ? Icons.lock_outline : (c.companyWide ? Icons.apartment : Icons.tag)),
-              title: Text(c.name),
+              leading: SizedBox(
+                width: 32,
+                child: Center(
+                  child: c.emoji != null
+                      ? Text(c.emoji!, style: const TextStyle(fontSize: 20))
+                      : Icon(c.isPrivate ? Icons.lock_outline : (c.companyWide ? Icons.apartment : Icons.tag)),
+                ),
+              ),
+              title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.w600)),
               subtitle: Text(
                 [
                   if (c.companyWide) '全社',
@@ -125,7 +138,7 @@ class _Section extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-              trailing: const Icon(Icons.chevron_right),
+              trailing: c.unreadCount > 0 ? CountBadge(c.unreadCount) : const Icon(Icons.chevron_right),
               onTap: () => onTap(c),
             ),
         ],
@@ -153,7 +166,9 @@ class _ChannelFeedScreenState extends State<ChannelFeedScreen> {
   @override
   void initState() {
     super.initState();
-    _feed = FeedController(api: AppScope.read(context).api, channelId: widget.channel.id);
+    _feed = FeedController.timeline(AppScope.read(context).api, channelId: widget.channel.id);
+    // 開いたら既読にする（メニューの未読数も消える）
+    AppScope.read(context).markSeen('channel-${widget.channel.id}');
   }
 
   @override
@@ -189,10 +204,7 @@ class _ChannelFeedScreenState extends State<ChannelFeedScreen> {
 
   Future<void> _compose() async {
     final post = await Navigator.of(context).push<Post>(
-      MaterialPageRoute(
-        builder: (_) => ComposeScreen(initialChannelId: _channel.id),
-        fullscreenDialog: true,
-      ),
+      MaterialPageRoute(builder: (_) => ComposeScreen(initialChannelId: _channel.id), fullscreenDialog: true),
     );
     if (post != null) _feed.insertNew(post);
   }
@@ -204,7 +216,7 @@ class _ChannelFeedScreenState extends State<ChannelFeedScreen> {
     return GlassScaffold(
       scrollUnderBars: true,
       appBar: GlassAppBar(
-        title: Text('#${c.name}'),
+        title: Text(c.label),
         actions: [
           if (canToggle)
             Padding(
@@ -225,15 +237,13 @@ class _ChannelFeedScreenState extends State<ChannelFeedScreen> {
             ? null
             : Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Text(
-                      [
-                        if (c.description.isNotEmpty) c.description,
-                        if (c.archived) 'このチャンネルはアーカイブされています（閲覧のみ）。',
-                      ].join('\n'),
-                    ),
+                child: SoftCard(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    [
+                      if (c.description.isNotEmpty) c.description,
+                      if (c.archived) 'このチャンネルはアーカイブされています（閲覧のみ）。',
+                    ].join('\n'),
                   ),
                 ),
               ),

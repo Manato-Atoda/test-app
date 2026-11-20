@@ -14,16 +14,10 @@ final _alnum = RegExp(r'^[A-Za-z0-9]$');
 /// 画面に出すパスワード規則のチェック結果（最終判定はサーバーが行う）。
 ///
 /// 社員コードを含まない・直近と同じでない、などはサーバー側でのみ確認する。
-List<PasswordCheck> evaluatePassword(
-  String password,
-  String confirm,
-  PasswordPolicy policy,
-) {
+List<PasswordCheck> evaluatePassword(String password, String confirm, PasswordPolicy policy) {
   final chars = password.split('');
   final hasSymbol = chars.any((c) => policy.allowedSymbols.contains(c));
-  final allAllowed = chars.every(
-    (c) => _alnum.hasMatch(c) || policy.allowedSymbols.contains(c),
-  );
+  final allAllowed = chars.every((c) => _alnum.hasMatch(c) || policy.allowedSymbols.contains(c));
   final length = password.length;
   return [
     PasswordCheck(

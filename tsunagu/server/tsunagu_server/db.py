@@ -243,7 +243,155 @@ CREATE TABLE IF NOT EXISTS mail_outbox (
   error TEXT,
   created_at INTEGER NOT NULL
 );
+
+-- ---------------------------------------------------------------- v2（M：Galaxia 寄せ）
+CREATE TABLE IF NOT EXISTS likes (
+  post_id INTEGER NOT NULL REFERENCES posts(id),
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (post_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS comment_likes (
+  comment_id INTEGER NOT NULL REFERENCES comments(id),
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (comment_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS bookmarks (
+  post_id INTEGER NOT NULL REFERENCES posts(id),
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (post_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS bookmarks_user ON bookmarks(user_id, created_at);
+
+CREATE TABLE IF NOT EXISTS post_views (
+  post_id INTEGER NOT NULL REFERENCES posts(id),
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (post_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS uploads (
+  id TEXT PRIMARY KEY,                            -- 推測できないランダムな ID
+  company_id INTEGER NOT NULL REFERENCES companies(id),
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  mime TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  width INTEGER NOT NULL,
+  height INTEGER NOT NULL,
+  path TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS drafts (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body TEXT NOT NULL,
+  identity TEXT NOT NULL DEFAULT 'real',
+  channel_id INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+-- 画面を最後に見た日時（home / forest / commit / channel-{id}）。新着の印を出すために使う
+CREATE TABLE IF NOT EXISTS seen_marks (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  key TEXT NOT NULL,
+  seen_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, key)
+);
+
+CREATE TABLE IF NOT EXISTS forest_categories (
+  id INTEGER PRIMARY KEY,
+  company_id INTEGER NOT NULL REFERENCES companies(id),
+  name TEXT NOT NULL,
+  emoji TEXT NOT NULL DEFAULT '',
+  description TEXT NOT NULL DEFAULT '',
+  position INTEGER NOT NULL DEFAULT 100,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS questions (
+  id INTEGER PRIMARY KEY,
+  company_id INTEGER NOT NULL REFERENCES companies(id),
+  category_id INTEGER NOT NULL REFERENCES forest_categories(id),
+  author_id INTEGER NOT NULL REFERENCES users(id),
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  identity TEXT NOT NULL DEFAULT 'real',
+  display_name TEXT,
+  created_at INTEGER NOT NULL,
+  deleted_at INTEGER,
+  deleted_by INTEGER
+);
+CREATE INDEX IF NOT EXISTS questions_company ON questions(company_id, id);
+
+CREATE TABLE IF NOT EXISTS question_views (
+  question_id INTEGER NOT NULL REFERENCES questions(id),
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  PRIMARY KEY (question_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS answers (
+  id INTEGER PRIMARY KEY,
+  company_id INTEGER NOT NULL REFERENCES companies(id),
+  question_id INTEGER NOT NULL REFERENCES questions(id),
+  author_id INTEGER NOT NULL REFERENCES users(id),
+  body TEXT NOT NULL,
+  identity TEXT NOT NULL DEFAULT 'real',
+  display_name TEXT,
+  created_at INTEGER NOT NULL,
+  deleted_at INTEGER,
+  deleted_by INTEGER
+);
+CREATE INDEX IF NOT EXISTS answers_question ON answers(question_id, id);
+
+CREATE TABLE IF NOT EXISTS answer_likes (
+  answer_id INTEGER NOT NULL REFERENCES answers(id),
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (answer_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS answer_comments (
+  id INTEGER PRIMARY KEY,
+  company_id INTEGER NOT NULL REFERENCES companies(id),
+  answer_id INTEGER NOT NULL REFERENCES answers(id),
+  author_id INTEGER NOT NULL REFERENCES users(id),
+  body TEXT NOT NULL,
+  identity TEXT NOT NULL DEFAULT 'real',
+  display_name TEXT,
+  created_at INTEGER NOT NULL,
+  deleted_at INTEGER,
+  deleted_by INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS insight_reports (
+  id INTEGER PRIMARY KEY,
+  company_id INTEGER NOT NULL REFERENCES companies(id),
+  provider TEXT NOT NULL,
+  model TEXT NOT NULL,
+  content TEXT NOT NULL,
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  created_by INTEGER,
+  created_at INTEGER NOT NULL
+);
 """
+
+# 既存のテーブルに足す列（古いデータベースもそのまま使えるように、起動時に足りない列を追加する）
+V2_COLUMNS = {
+    "users": [("nickname", "TEXT"), ("avatar_upload", "TEXT"), ("cover_upload", "TEXT")],
+    "channels": [("emoji", "TEXT"), ("system_kind", "TEXT")],   # system_kind = 'commit'（COMMIT 置き場）
+    "posts": [("identity", "TEXT NOT NULL DEFAULT 'real'"), ("display_name", "TEXT"),
+              ("images", "TEXT NOT NULL DEFAULT '[]'"), ("quote_of", "INTEGER")],
+    "comments": [("identity", "TEXT NOT NULL DEFAULT 'real'"), ("display_name", "TEXT"),
+                 ("is_quick", "INTEGER NOT NULL DEFAULT 0"), ("edited_at", "INTEGER")],
+    "notifications": [("question_id", "INTEGER"), ("answer_id", "INTEGER"), ("actor_name", "TEXT")],
+}
 
 DEFAULT_GUIDELINES = """社内SNS 利用ガイドライン
 
@@ -253,7 +401,9 @@ DEFAULT_GUIDELINES = """社内SNS 利用ガイドライン
 4. 画面の撮影や転送などで、投稿内容を社外へ持ち出さないでください。
 5. 投稿・コメントは管理者が確認し、規程に反するものは非表示にすることがあります。
    また、利用の記録は監査のために保存されます。
-6. 不適切な投稿を見つけたら、投稿のメニューから「通報」してください。"""
+6. 部署名・匿名（あだ名）での投稿も、ほかの人と同じルールが適用されます。
+   通報があった場合、管理者は対応のために投稿者を確認できます。
+7. 不適切な投稿を見つけたら、投稿のメニューから「通報」してください。"""
 
 DEFAULT_SETTINGS: Dict[str, Any] = {
     "password_min_length": 8,
@@ -264,7 +414,24 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "session_days": 30,
     "guidelines": DEFAULT_GUIDELINES,
     "guidelines_version": 1,
+    # v2: 発信者の切り替え（部署名・匿名）と、スマホでの透かし
+    "identity_department_enabled": True,
+    "identity_anonymous_enabled": True,
+    "watermark_mobile": False,
 }
+
+QUICK_COMMENTS = [
+    {"emoji": "👏", "text": "ナイス！"}, {"emoji": "🙌", "text": "お疲れさまです"}, {"emoji": "🔥", "text": "最高！"},
+    {"emoji": "💡", "text": "参考になります"}, {"emoji": "✨", "text": "いいですね"},
+    {"emoji": "💪", "text": "がんばってください"}, {"emoji": "🎉", "text": "おめでとうございます"},
+    {"emoji": "🤝", "text": "ありがとうございます"}, {"emoji": "👀", "text": "気になる"}, {"emoji": "🍵", "text": "お疲れさま"},
+]
+
+DEFAULT_FOREST_CATEGORIES = [
+    ("みんなの広場", "🌳", "どこに聞けばいいかわからないことは、まずここへ"),
+    ("営業", "💼", ""), ("クリエイティブ", "🎨", ""), ("エンジニア", "💻", ""),
+    ("バックオフィス", "📋", "経費・勤怠・社内手続きなど"), ("アルバイト", "🎒", ""),
+]
 
 JST = timezone(timedelta(hours=9))
 
@@ -304,6 +471,7 @@ def init_db(path: str) -> None:
     try:
         conn.execute("PRAGMA journal_mode = WAL")
         conn.executescript(SCHEMA)
+        migrate(conn)
         conn.commit()
     finally:
         conn.close()
@@ -326,3 +494,42 @@ def audit(conn: sqlite3.Connection, *, company_id: Optional[int], actor_id: Opti
         " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (company_id, actor_id, action, target_type, target_id,
          json.dumps(detail or {}, ensure_ascii=False), ip, now()))
+
+
+def migrate(conn: sqlite3.Connection) -> None:
+    """古いデータベースを v2 の形にそろえる（何度実行しても同じ結果になる）。"""
+    for table, columns in V2_COLUMNS.items():
+        existing = {r[1] for r in conn.execute("PRAGMA table_info(%s)" % table)}
+        for name, decl in columns:
+            if name not in existing:
+                conn.execute("ALTER TABLE %s ADD COLUMN %s %s" % (table, name, decl))
+    # v1 の 6 種類のリアクションは、ハートのいいねに移す（1 人 1 回）
+    conn.execute("INSERT OR IGNORE INTO likes (post_id, user_id, created_at)"
+                 " SELECT post_id, user_id, MIN(created_at) FROM reactions GROUP BY post_id, user_id")
+    conn.execute("DELETE FROM reactions")
+    for row in conn.execute("SELECT id FROM companies").fetchall():
+        ensure_company_defaults(conn, row[0])
+
+
+def ensure_company_defaults(conn: sqlite3.Connection, company_id: int) -> None:
+    """企業ごとに必要なもの（COMMIT 置き場のチャンネル・森のカテゴリ）がなければ作る。"""
+    if not conn.execute("SELECT 1 FROM channels WHERE company_id = ? AND system_kind = 'commit'",
+                        (company_id,)).fetchone():
+        conn.execute("INSERT INTO channels (company_id, name, description, visibility, company_wide, post_policy,"
+                     " sort_order, system_kind, emoji, created_at)"
+                     " VALUES (?, ?, 'COMMIT（宣言）の置き場。一覧には出ない', 'open', 1, 'everyone', 999, 'commit', '🚩', ?)",
+                     (company_id, "__commit__", now()))
+    if not conn.execute("SELECT 1 FROM forest_categories WHERE company_id = ?", (company_id,)).fetchone():
+        for position, (name, emoji, desc) in enumerate(DEFAULT_FOREST_CATEGORIES):
+            conn.execute("INSERT INTO forest_categories (company_id, name, emoji, description, position, created_at)"
+                         " VALUES (?, ?, ?, ?, ?, ?)", (company_id, name, emoji, desc, position, now()))
+
+
+def get_seen(conn: sqlite3.Connection, user_id: int, key: str) -> int:
+    row = conn.execute("SELECT seen_at FROM seen_marks WHERE user_id = ? AND key = ?", (user_id, key)).fetchone()
+    return int(row[0]) if row else 0
+
+
+def mark_seen(conn: sqlite3.Connection, user_id: int, key: str) -> None:
+    conn.execute("INSERT INTO seen_marks (user_id, key, seen_at) VALUES (?, ?, ?)"
+                 " ON CONFLICT(user_id, key) DO UPDATE SET seen_at = excluded.seen_at", (user_id, key, now()))

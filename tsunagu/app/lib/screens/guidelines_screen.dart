@@ -38,18 +38,13 @@ class _GuidelinesScreenState extends State<GuidelinesScreen> {
     final state = AppScope.of(context);
     final theme = Theme.of(context);
     final company = state.company;
-    final text = (company?.guidelines.trim().isNotEmpty ?? false)
-        ? company!.guidelines
-        : 'ガイドラインはまだ設定されていません。';
+    final text = (company?.guidelines.trim().isNotEmpty ?? false) ? company!.guidelines : 'ガイドラインはまだ設定されていません。';
 
     return Scaffold(
       appBar: GlassAppBar(
         title: const Text('利用ガイドライン'),
         automaticallyImplyLeading: widget.readOnly,
-        actions: [
-          if (!widget.readOnly)
-            GlassButton(label: 'ログアウト', onPressed: _busy ? null : () => state.logout()),
-        ],
+        actions: [if (!widget.readOnly) GlassButton(label: 'ログアウト', onPressed: _busy ? null : () => state.logout())],
       ),
       body: SafeArea(
         child: Column(
